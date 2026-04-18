@@ -63,7 +63,7 @@ def llm_chat_completion(
     system_prompt: str,
     user_prompt: str,
     model: str,
-    temperature: float = 0.2,
+    temperature: float = 1.2,
     max_retries: int = 2,
     timeout: float = 60.0,
 ) -> str:

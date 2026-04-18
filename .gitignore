@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
+
 __pycache__/
 *.pyc
 *.pyo
@@ -12,3 +15,16 @@ runs/
 logs/
 *.log
 *.tmp
+
+# game-specific seeds and runtime artefacts — not part of the engine itself.
+# Delete or rescope entries below if a particular world should ship with the
+# repo. Everything under examples/starter/ is intentionally kept.
+examples/droga_smoka/
+reports/
+*.report.txt
+
+# wet-run outputs, replay captures, ad-hoc scratch
+replay_*.json
+replay_*.jsonl
+wet_run_*.txt
+scratch/

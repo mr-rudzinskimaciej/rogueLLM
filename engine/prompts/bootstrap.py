@@ -232,8 +232,31 @@ The story_arc is NOT a plot. It is a tension that exists at the moment of
 seeding. "Three strangers share a crossing for a day. None of them planned
 to meet." — not "The heroes must stop the dark lord."
 
-The intervention_policy guides the GM LLM at runtime. Tells it how eager to
-fire, what kinds of nudges are appropriate, what to leave alone.
+The intervention_policy guides the GM LLM at runtime. Write it as a
+description of WHAT THE GM DOES in this setting — the channels, textures,
+and kinds of action available to it — not as a description of how often
+it stays silent. The GM does not speak to the player; it acts through the
+world. In a dragon's gut world the GM acts through tremors in the flesh,
+rumours from other organs, whispers inside a being's own skull. In a
+trading-post world the GM acts through weather, travellers arriving,
+market rumours. Name the channels specific to this setting.
+
+BAD intervention_policy (silence-shaped, collapses to pass):
+  "Fire rarely. Prefer silence. Only act when beings are stuck. Let the
+  beings carry the tension themselves."
+
+GOOD intervention_policy (action-shaped, names what the GM can do):
+  "Your interventions shape the WORLD, not the meta-conversation — you
+  do not speak to the player, you act through [settings-specific
+  channels: the dragon's flesh / the weather / the road / the tides].
+  Act through: world-events (tremors / dust storms / tides), rumours
+  (news from other places), whispers to beings (felt as intuition),
+  and stat-nudges when a body's reality needs to shift. Weight toward:
+  [lore-specific moments — name two or three]."
+
+This framing solves a prompt-attractor problem: if the intervention_policy
+reads as a silence-reward, the GM collapses to pass() regardless of what
+else you tell it. Describe what it DOES and the model will do that.
 
 SCOPE — soft counts, not hard.
   small:  1 map,  ~3 beings,  ~6 items,  ~2 setting-specific rules

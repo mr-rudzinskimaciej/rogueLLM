@@ -1233,7 +1233,7 @@ def compact_memory(
     )
 
     # Call LLM
-    raw = llm_call(MEMORY_COMPACTION_SYSTEM, user_prompt, model, 0.7)
+    raw = llm_call(MEMORY_COMPACTION_SYSTEM, user_prompt, model, 1.2)
     if not raw or raw.strip() == "wait":
         return {"success": False, "message": "LLM returned empty response"}
 
