@@ -455,6 +455,15 @@ One line per action. No commentary."""
                 audit=[f"role:{c['role']}:{c['total_tokens']}tok:${(c['cost_reported'] or c['cost_computed']):.4f}" for c in turn_calls],
                 last_event_idx=last_event_idx, private_seen=private_seen,
             )
+            # append_frame records engine.state.turn, but run_round increments
+            # it at the END of the round — so the frame we just pushed is labelled
+            # one turn ahead of the turn it actually represents. Rewrite it to
+            # the turn that was just executed, and fix the snapshot's turn too.
+            if capture_obj["frames"]:
+                capture_obj["frames"][-1]["turn"] = current_turn
+                snap = capture_obj["frames"][-1].get("state") or {}
+                if "turn" in snap:
+                    snap["turn"] = current_turn
             capture_obj["meta"]["role_calls"].append({
                 "turn": current_turn, "roles": role_counts,
                 "prompt": pt, "completion": ct, "cost": cost,

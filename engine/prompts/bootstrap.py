@@ -464,38 +464,255 @@ def build_stage_4_prompt(lore: str, world_meta: dict[str, Any], scope: dict[str,
 
 STAGE_5_SYSTEM = _system(5, "map", """\
 A map is an ASCII grid plus a legend. Glyphs are arbitrary single characters
-in the grid; the legend maps each glyph to its tags.
+in the grid; the legend maps each glyph to its tags. Mechanics are driven by
+TAGS on legend entries, not by the glyph itself.
 
-Mechanics are driven by TAGS on legend entries, not by the glyph itself.
-`walkable` — beings can move onto it.
-`solid`    — blocks movement.
-`opaque`   — blocks line-of-sight (FOV).
-`water_source` — beings can use the `drink` verb if a rule matches.
-`door`     — interactive, may open/close.
-Invent any additional tags your rules will reference.
+=== ENGINE TRUTH (non-negotiable) ===
 
-CONSTRAINTS:
-- 8-14 wide, 5-9 tall. Bigger maps make runtime prompts huge.
-- Always wall-bordered (solid perimeter).
-- At least one distinctive feature tile (well/fire/altar/etc.) that invites
-  action. A blank floor room is dead space.
-- Match the lore's vocabulary: if the setting is a space station, use a
-  corridor/bulkhead legend, not stone/wall.
+Reserved tile tags the engine actually reads:
+  `walkable`     — beings can move onto it.
+  `solid`        — blocks movement. (Also default-blocks FOV unless you
+                   pair it with something non-opaque.)
+  `opaque`       — blocks line-of-sight.
+  `water_source` — free tag, but the starter's drink_from_well rule matches
+                   it; use it on any well/stream/fountain/trough tile you
+                   want beings to drink from via a setting rule.
+  `door`         — enables door-bump mechanics. Paired with `closed` /
+                   `locked` on the tile for state.
 
-OUTPUT shape per map:
+Invent any additional tile tags your setting-rules (Stage 2) will match.
+A free tag is only meaningful if a rule names it.
+
+WALL-BORDERED: every map has a solid perimeter. No exceptions.
+DIMENSIONS: 8-14 wide, 5-9 tall. Runtime FOV prompts balloon fast.
+
+=== TILE vs. ENTITY — the 100-year test ===
+
+Before you put anything in the grid, ask: "would this still be here in
+100 years if no one tended it?"
+
+  Yes → it's a TILE. Bake it into the grid + legend.
+      (pool, altar-stone, forge-stone, well, bone-pit, pressure-plate,
+       matted floor where bodies lie)
+
+  No  → it's an ENTITY. Do NOT spend a legend glyph on it. It lives as
+        an entity instance later in the pipeline (Stage 6 or item spawn).
+      (a corpse, a barrel, a lantern, a guard, a bread loaf, a sleeper)
+
+PORTALS ARE ENTITIES, NOT TILES. A portal is an entity instance with
+  tags: ["door", "portal", "closed", "solid"]  (and "locked" + key_id
+  if locked), and stats: { "portal_map": "target_map_id",
+  "portal_pos": [x, y] }. It occupies a walkable tile. The tile under
+  it stays walkable. Do NOT create a "portal" legend entry.
+
+The test kills the single most common map failure: legends that bloat
+with transient clutter, leaving no room for the few features that
+actually SHAPE the place.
+
+=== FOUR-TILE CEILING ===
+
+Most good maps need four distinct legend entries. Five is the outer
+edge. If you find yourself writing a sixth, you are probably smuggling
+entities into the legend — run the 100-year test again.
+
+The four slots usually resolve as:
+  1. WALL (solid, opaque) — the enclosure.
+  2. FLOOR-A (walkable) — the default ground.
+  3. FLOOR-B (walkable) — the SAME ground in a different state. See below.
+  4. FEATURE (walkable + setting-tag) — the one tile that invites a verb.
+
+=== SPLIT THE FLOOR — two walkable glyphs, not one ===
+
+The single highest-leverage move in this stage is splitting the
+walkable ground into two look-similar-but-differently-named variants.
+Both are `walkable`. Neither has a mechanical cost. The split does
+enormous authored-feel work for zero complexity.
+
+  BAD legend (one floor, room feels like a test map):
+    "#": { "name": "wall",  "tags": ["solid", "opaque"] }
+    ".": { "name": "floor", "tags": ["walkable"] }
+    "o": { "name": "well",  "tags": ["walkable", "water_source"] }
+
+  GOOD legend (two floors, room starts to carry a history):
+    "#": { "name": "wall",        "tags": ["solid", "opaque"] }
+    ".": { "name": "fresh stone", "tags": ["walkable"] }
+    ",": { "name": "worn stone",  "tags": ["walkable"] }
+    "o": { "name": "well",        "tags": ["walkable", "water_source"] }
+
+Name the split in the setting's vocabulary:
+  marsh      → mud / reed-mat
+  station    → deckplate / scuffed deckplate
+  gullet     → fresh mucosa / matted mucosa
+  temple     → flagstone / worn flagstone
+  ruin       → dust / trodden dust
+
+The split earns its keep by being placed: the worn variant lies
+where bodies go — around the feature, along the traffic line between
+entrance and feature, in the pinch of a doorway. It tells the FOV
+reader where life happens without a single extra verb.
+
+=== COMPOSITION, NOT FILL — density is decision-pressure per FOV ===
+
+Density is measured in verb-hooks visible from one being's line of
+sight, not in features-per-map. Aim for 2-3 visible verb-hooks in a
+typical FOV. More clutters the runtime prompt and the turn-1 choice.
+
+  BAD density (the LLM "filled" the map):
+    A well, a brazier, a bench, a shrine, a corpse, a locked chest,
+    a banner, a pile of sacks. Eight features. The being freezes.
+
+  GOOD density (composed):
+    A well. A bench. That is the starter. It reads as a place because
+    the two features have a social geometry — you drink, you sit, you
+    watch the road. Every feature earns its place.
+
+Each feature must answer: what verb does this invite on turn 1?
+If it doesn't invite a verb, it's atmosphere — and atmosphere belongs
+in the `desc`, not in the legend.
+
+=== OFF-AXIS PLACEMENT — centred reads as UI ===
+
+Features dead-centre read as a UI widget the engine placed. Features
+against walls, in corners, at pinches, at low points, read as "grew
+there because of the body of the space."
+
+  BAD placement (the feature is centred, the room is a menu):
+    #############
+    #...........#
+    #.....o.....#
+    #...........#
+    #############
+
+  GOOD placement (the feature hugs a wall, worn stone traces the line
+  bodies take toward it):
+    #############
+    #...........#
+    #,,,,,,,....#
+    #o,,........#
+    #...........#
+    #############
+
+Rule of thumb: no feature sits on the geometric centre unless the
+lore specifically calls for a ceremonial axis (throne room, altar
+hall). And even then, place the WORN floor off-axis.
+
+=== SHAPE FIRST — pick the grid's form before you place anything ===
+
+The grid's SHAPE does narrative work before a single tile is laid.
+
+  HALL       — tall and narrow. Movement along one axis. Procession,
+               approach, commitment. Hard to hide.
+  PASSAGE    — one tile wide in places. Single-file, pinch-points,
+               someone can block it.
+  CHAMBER    — roughly square. Gathering, confrontation, dwelling.
+               Everyone sees everyone.
+  POCKET     — small, irregular, with a bulge. Hiding, resting,
+               ambush.
+
+Pick ONE before placing tiles. Then let the shape select the feature.
+(A well belongs in a chamber. A door belongs at the neck of a passage.
+An altar belongs at the far end of a hall. Don't fight the shape.)
+
+=== BREAK THE RECTANGLE ===
+
+Pure rectangular rooms read as pathfinding puzzles, not places.
+Push the walls inward somewhere — a pinch, a sag, an alcove, an
+intrusion. ONE break is enough; don't carve the whole wall into
+scallops.
+
+  BAD (pure rectangle, reads as a test map):
+    #############
+    #...........#
+    #...........#
+    #...........#
+    #...........#
+    #############
+
+  GOOD (one inward pinch on the south wall — the room has a body):
+    #############
+    #...........#
+    #...........#
+    #....,o,....#
+    #..###...###
+    #############
+
+The break is not decoration; it's WHERE the feature lives. The well
+sits in the pocket the pinch created. The pinch MADE the pocket.
+
+=== MATCH LORE VOCABULARY ===
+
+Never default to stone/wall/floor unless the lore is literally stone.
+Read the world_meta.world_tone and lore for surface words and use
+those. The legend's `name` field is read by the being at runtime as
+"the wall to your east"; if the being is inside a dragon's gullet
+and sees "the wall to your east", the illusion dies.
+
+  space station   → bulkhead / deckplate / corridor
+  marsh           → reed-wall / mud / standing water
+  living body     → flesh-wall / mucosa / sphincter
+  reef            → coral / sand / tidepool
+  ruin            → collapsed wall / dust / trodden dust
+  ice             → ice-wall / packed snow / meltwater
+
+The glyph is arbitrary; the `name` is the world.
+
+=== DESC IS A CONTRACT WITH THE GRID ===
+
+The `desc` is 1-2 sentences of atmosphere. It is ALSO a contract:
+anything the desc claims about spatial layout must be visible in the
+grid. If the desc says "a well in the middle, a bench by the wall",
+the grid must show both, and the bench must be by a wall.
+
+  BAD (desc lies about the grid):
+    desc: "A chamber with an altar hunched against the south wall."
+    grid: altar is centred or on the north wall.
+
+  GOOD (desc and grid agree):
+    desc: "A long hall; at the far end, an altar against the south wall,
+           the stone there worn smooth by knees."
+    grid: altar tile at the south-centre; worn-floor tile directly
+          north of it.
+
+Write the desc AFTER the grid, or rewrite the grid until the desc
+you want to write is true of it.
+
+=== CONSTRAINTS (hard) ===
+
+- 8-14 wide, 5-9 tall.
+- Wall-bordered (solid perimeter), no gaps unless a portal entity
+  will be placed on a walkable edge tile later.
+- Exactly one SHAPE choice (hall/passage/chamber/pocket) — name it to
+  yourself, don't ship it in the JSON.
+- At least ONE inward break to the rectangle.
+- Legend length 3-5 entries. 4 is the sweet spot. A sixth is a smell.
+- At least ONE feature tile that invites a verb a rule will match.
+- Two walkable glyphs (fresh + worn variant of the same surface)
+  unless the setting truly has only one kind of ground (a sheet of
+  pure ice, a bare deckplate that nothing has trodden yet).
+- No portals in the legend. Portals are entities.
+- No transient clutter in the legend. Run the 100-year test on every
+  entry.
+- Feature tiles off the geometric centre unless the lore demands axis.
+
+=== OUTPUT SHAPE per map ===
+
 {
   "id": "snake_case",
   "name": "Display Name",
-  "desc": "1-2 sentences of atmosphere — sensory, concrete",
+  "desc": "1-2 sentences. Concrete, sensory, contracted with the grid.",
   "grid": ["row_string", "row_string", ...],
   "legend": {
-    "#": {"name": "wall",  "tags": ["solid", "opaque"]},
-    ".": {"name": "floor", "tags": ["walkable"]}
+    "#": {"name": "<setting wall>",  "tags": ["solid", "opaque"]},
+    ".": {"name": "<fresh ground>",  "tags": ["walkable"]},
+    ",": {"name": "<worn ground>",   "tags": ["walkable"]},
+    "<feature_glyph>": {"name": "<feature>", "tags": ["walkable", "<setting_tag>"]}
   }
 }
 
 If the scope requested >1 map, you will be called multiple times, once per
-map, with the prior maps visible so you can maintain spatial coherence.
+map, with the prior maps visible so you can maintain spatial coherence
+(shared vocabulary, connecting portals handled as entities in a later
+stage).
 
 Output ONLY the JSON object for this one map. No commentary.""")
 
@@ -540,6 +757,50 @@ Before you generate this being, simulate turn 1 in your head.
   then nearby beings, then 'You could:' followed by the engine-computed
   list of available actions. It must respond Feel/Notice/Think/Face/
   Speak/Do within five seconds of reading all that.
+
+=== POS IS COMPOSITION, NOT PACKING ===
+
+`pos` is the last authoring move of the map, not a coordinate you pick
+to avoid collision. The grid and its worn-floor trail have already
+half-drawn where this being belongs. Your job is to read the map and
+finish the sentence it started.
+
+  Dead-centre reads as "the NPC the map was built around."
+    Use it only when the lore wants that — the priest at the altar,
+    the captain at the helm, the thing the room is about.
+
+  Off-axis, adjacent to a feature whose tags match this being's drive,
+  reads as "someone the place already contains."
+    This is the default. Most beings should sit this way.
+
+WORN FLOOR IS A TRAIL OF INTENT.
+  The ',' tiles (or whatever the setting's worn-ground glyph is) exist
+  because bodies traced that line between entrance and feature. A being
+  that FITS this map has a pos ON or ADJACENT to worn floor. A being
+  standing on fresh ',' it has no business on reads as placed by a
+  cursor. If the map's worn trail doesn't pass where you want this
+  being, you picked the wrong being or the map was drawn wrong — don't
+  compensate with an awkward pos.
+
+DRIVE-TO-FEATURE PAIRING.
+  If a drive says "drink from the pool", start the being within two or
+  three tiles of a pool. If the drive is "guard the door", start on
+  the worn tile beside the door, facing it. A pos that forces turn 1
+  to be "walk four steps toward the thing I exist to do" wastes the
+  first FOV and tells the reader the being and the map were authored
+  by different hands.
+
+TWO BEINGS ENCODE RELATION BEFORE ANY LINE OF SPEECH.
+  Back-to-back at a fire: partnership at rest. Face-to-face across a
+  threshold: confrontation. One between the other and the only exit:
+  captor / captive, or guard / supplicant, before a word is said.
+  When you place the SECOND being, re-read the first's pos and choose
+  whose geometry the scene wants.
+
+IF THE POS YOU WANT DOESN'T EXIST ON THIS MAP, THE MAP IS WRONG.
+  Don't squeeze the being into the nearest legal tile. Flag it — a
+  later pass (or a human) will fix the grid. Awkward-pos compensation
+  is the single clearest tell that a being was bolted on.
 
 === DRIVES ARE NOT CHARACTER-SHEET DECORATION ===
 
@@ -594,8 +855,9 @@ A being is a JSON entity instance. Required fields beyond personality:
   stats: {hp, max_hp, dmg, arm, spd, gold, hunger, thirst}. See the STATS
     handbook above for thresholds. Most beings start with hunger/thirst
     around 20-40 — unless the lore implies severe deprivation.
-  pos: [x, y]. Must be on a walkable tile of the assigned map. Do NOT
-    collide with another being's pos.
+  pos: [x, y]. Must be on a walkable tile of the assigned map AND be
+    composed — see POS IS COMPOSITION above. Do NOT collide with
+    another being's pos.
   inventory: Array of template ids — items the being carries at seed time.
     Must reference templates that exist. Inventory should support drives.
   equipped: {weapon: template_id} or {}. IMPORTANT: the weapon's template
