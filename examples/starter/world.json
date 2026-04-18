@@ -1,0 +1,15 @@
+{
+  "turn": 0,
+  "rng_seed": 1,
+  "start_map": "crossing",
+  "map_file": "map_crossing.json",
+  "entities_file": "entities.json",
+  "rules_file": "rules.json",
+  "statuses_file": "statuses.json",
+  "gm_notes": {
+    "world_name": "The Crossing",
+    "world_tone": "The world is what it is. People cooperate transactionally. Kindness is real, or a trap, or a risk. You decide each time. You do not volunteer information that could cost you. You act from what your body and memory already know. Replace this line in your own world.json to change the tone of every being's inner voice.",
+    "story_arc": "Three strangers share a crossing for a day. None of them planned to meet. All of them have somewhere else to be.",
+    "intervention_policy": "Fire rarely. Let beings' own needs drive the scene. Nudge only when a loop gets stuck."
+  }
+}

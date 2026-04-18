@@ -1,0 +1,271 @@
+{
+  "_comment": "Canonical engine physics. Single source of truth for bootstrap prompts and future-developer reference. Do not duplicate these facts elsewhere — cite this file. This is a living reference; expect the schema to evolve as the engine grows.",
+
+  "runtime": {
+    "npc_system_prompt_shell": [
+      "You are {name}.",
+      "",
+      "This is your life. Not a game. Not a story. The stone under your feet is real. The hunger in your gut is real. The faces you trust and the ones you don't — real. You have been alive for every moment that brought you here. You don't know any other world. You don't know anyone is watching.",
+      "",
+      "{personality.identity_anchor}",
+      "{personality.body}",
+      "",
+      "{personality.wound}",
+      "",
+      "Your thoughts sound like: {personality.inner_voice}",
+      "",
+      "You always notice first: {personality.notices_first}",
+      "What you fear: {personality.fears}",
+      "What steadies you: {personality.comfort}",
+      "",
+      "- {personality.contradictions[0]}",
+      "- {personality.contradictions[1]}",
+      "",
+      "How you speak: {personality.speech}",
+      "",
+      "{world_tone}",
+      "",
+      "The map is what you can see. The stats are what you feel in your body. The events are what happened within your hearing. Nothing exists outside this. You act from what you have.",
+      "",
+      "- {bond_target_id}: {bond_text}"
+    ],
+    "npc_user_prompt_shape": {
+      "description": "What the being is shown fresh every turn. The system prompt (above) is stable identity; the user prompt is the present moment. Writing data so Stage 6 beings are animated at turn-1 requires knowing what this prompt contains.",
+      "sections_in_order": [
+        "Body state — 'You are in {map}. It is {period}.' + hunger/thirst in sensory language + gold + inventory",
+        "Drives — 'What drives you: {drives}'",
+        "Knowledge — 'You know: {knowledge}'",
+        "Plan — 'Your plan for today: {plan}'",
+        "GM whispers (if any) — 'A feeling rises in you: {text}'",
+        "Private log — recent Feel/Notice/Think/Face/Say/action entries with turn numbers",
+        "Map view — FOV-filtered ASCII grid with a glyph→name legend",
+        "Nearby beings — one line each with stats/status",
+        "Open view (trade/search) — if active",
+        "Events — what happened within hearing recently, minus own actions",
+        "Directed speech — someone spoke to you, you have not responded",
+        "Available actions — engine-computed list of exactly-copyable commands",
+        "Response format — the Feel/Notice/Think/Face/Speak/Do/Relation protocol"
+      ]
+    },
+    "npc_response_format": "Feel: ...\nNotice: ...\nThink: ...\nFace: ...\nSpeak: ...\nDo: [exact action from the list above]\nRelation: target_id=new_stance 'reason' (only if stance changed)"
+  },
+
+  "tags": {
+    "_doc": "Three tiers. The amnesiac must know which tier a tag lives in before using it. Inventing a tag in the reserved tier does nothing extra — the engine's hardcoded behavior is already bound. Inventing in the universal tier hijacks the universal rule. Inventing in the free tier only matters if your own rules match it.",
+
+    "reserved_engine_physics": {
+      "walkable": "On a legend entry: actor can move onto this tile. Checked by engine movement validity.",
+      "solid": "On a legend entry: blocks movement. Also default-blocks line-of-sight unless paired with non-opaque.",
+      "opaque": "Blocks FOV (the NPC cannot see past it).",
+      "alive": "On an entity: engine treats as a living being. Required for most NPC action rules. Removed at death.",
+      "mobile": "On an entity: may move between tiles. Required by the universal move rule.",
+      "item": "On an entity or template: it can live in an inventory, be given, used, traded.",
+      "inventory_source": "On an entity: other beings can open-view and take/trade with its inventory.",
+      "door": "Enables the door-bump effect and engine door mechanics (open/close cycle).",
+      "portal": "Paired with stats.portal_map + stats.portal_pos: transitions actor to another map when entered.",
+      "closed": "Door state. When present, door blocks movement. Engine removes this on successful bump/open.",
+      "locked": "Door sub-state. Requires a matching key (item.stats.key_id == target.stats.lock_id).",
+      "status": "On a status definition: marks it as a status (bookkeeping)."
+    },
+
+    "matched_by_universal_rules": {
+      "_doc": "The universal rules shipped by the bootstrap (move/wait/attack/eat/drink/give) check these tags. Use them on your items/beings and the universals will 'just work' — no new rules needed.",
+      "food+consumable": "Together on an item template → the eat_food universal rule will match 'use <item>'. Requires stats.heal and stats.hunger_relief.",
+      "drink+consumable": "Together on an item template → the drink_from_skin universal rule. Requires stats.thirst_relief.",
+      "weapon+melee": "On an equipped weapon → the attack_melee rule triggers on 'attack <target>'. Requires stats.dmg on the weapon (or falls back to actor.stats.dmg)."
+    },
+
+    "free_namespace": {
+      "_doc": "Any tag not in the two tables above. Only matters if a rule you wrote matches it. Examples of free tags from the starter: 'human', 'merchant', 'armed', 'hazardous', 'water_source'. The 'water_source' tag is free but the starter's drink_from_well rule matches it — a perfect example of how free tags become meaningful by rule-matching.",
+      "examples": ["merchant", "human", "armed", "water_source", "hazardous", "ghost", "noble", "cursed", "marked"]
+    }
+  },
+
+  "stats": {
+    "_doc": "Numeric keys on entity.stats. Some have engine-privileged behavior — renaming breaks the engine's ability to see them. Free stats can be invented for any setting; they only matter if your rules or effects reference them.",
+
+    "hp":        { "type": "int", "engine_reads": "damage effect decrements; entity dies at 0", "typical_range": [8, 50] },
+    "max_hp":    { "type": "int", "engine_reads": "heal effect caps at this value", "typical_range": [8, 50] },
+    "dmg":       { "type": "int", "engine_reads": "default damage formula uses actor.stats.dmg", "typical_range": [1, 15] },
+    "arm":       { "type": "int", "engine_reads": "default damage formula subtracts target.stats.arm", "typical_range": [0, 10] },
+    "spd":       { "type": "int", "engine_reads": "turn scheduler (higher = sooner)", "typical_range": [60, 120] },
+    "gold":      { "type": "int", "engine_reads": "referenced by trade/bribe/sell rules; not engine-privileged but universally useful", "typical_range": [0, 200] },
+
+    "hunger":    { "type": "int", "engine_reads": "auto-increments +1 per turn; 70 adds tag 'hungry'; 90 adds 'starving'; while starving, -1 hp every 10 turns", "typical_range": [10, 50] },
+    "thirst":    { "type": "int", "engine_reads": "auto-increments +1 per turn; 80 adds tag 'parched'; 95 adds 'dehydrated'; while dehydrated, -1 hp every 10 turns", "typical_range": [10, 50] },
+
+    "_item_stats": {
+      "heal": "int — how much hp the eat_food rule restores",
+      "hunger_relief": "int — how much the eat_food rule subtracts from hunger",
+      "thirst_relief": "int — how much the drink_from_skin rule subtracts from thirst",
+      "value": "int — trade value; convention, not engine-privileged",
+      "key_id": "string — matched against target.stats.lock_id for the use-key rule"
+    }
+  },
+
+  "effects": {
+    "_doc": "The list of effect primitives the engine can execute from rules. One example per primitive. Effects reference context via {actor.*}, {target.*}, {item.*}, {result.*}.",
+
+    "move":          { "example": { "effect": "move", "target": "actor", "to": "target.pos" } },
+    "damage":        { "example": { "effect": "damage", "target": "target", "formula": "max(1, actor.stats.dmg - target.stats.arm)" } },
+    "heal":          { "example": { "effect": "heal", "target": "actor", "formula": "item.stats.heal" } },
+    "mod_stat":      { "example": { "effect": "mod_stat", "target": "actor", "stat": "thirst", "delta": -35 }, "notes": "delta can be a literal int or an expression like '-item.stats.thirst_relief'" },
+    "add_tag":       { "example": { "effect": "add_tag", "target": "target", "tag": "stunned" } },
+    "remove_tag":    { "example": { "effect": "remove_tag", "target": "target", "tag": "stunned" } },
+    "transfer_item": { "example": { "effect": "transfer_item", "from": "actor", "to": "target", "item": "item.id" } },
+    "remove_item":   { "example": { "effect": "remove_item", "entity": "actor", "item": "item.id" } },
+    "remove_status": { "example": { "effect": "remove_status", "target": "actor", "status": "bleeding" } },
+    "message":       { "example": { "effect": "message", "text": "{actor.name} does the thing to {target.name}." }, "notes": "Uses {placeholder} string interpolation against the context." },
+    "portal":        { "example": { "effect": "portal", "target": "actor" }, "notes": "Uses the target's stats.portal_map and stats.portal_pos." },
+    "door_bump":     { "example": { "effect": "door_bump", "target": "target" }, "notes": "Opens a closed door; unlocks if actor holds a matching key." },
+    "open_view":     { "example": { "effect": "open_view", "mode": "trade", "source": "target" }, "notes": "Opens a trade/search view; state sits in engine.state.flags until consumed." },
+    "trigger":       { "example": { "effect": "trigger", "verb": "attack", "actor": "actor", "target": "target" }, "notes": "Triggers another rule to fire — use carefully, can chain." }
+  },
+
+  "rule_matcher_fields": {
+    "_doc": "A rule fires when all of these match for a given (verb, actor, target, item) attempt. Undefined fields are unchecked.",
+    "verb":            "string — the verb the actor attempted",
+    "actor_has":       "list[str] — required tags on the actor",
+    "actor_equipped":  "list[str] — required tags on the actor's equipped weapon",
+    "target_has":      "list[str] — required tags on the target (entity or tile)",
+    "item_has":        "list[str] — required tags on the item used (for 'use' verbs)",
+    "target_near":     "bool — target must be adjacent to actor",
+    "condition":       "str — python expression evaluated against context; e.g. 'actor.stats.gold >= 10'",
+    "priority":        "int — higher priority rules try first; -100 is default fallback used when no specific rule matches",
+    "effects":         "list[effect] — what fires on match"
+  },
+
+  "priority_worked_example": {
+    "_doc": "Rule collision example — when more than one rule could fire for the same (verb, actor, target), priority decides. Higher wins. This is the single most common silent mis-seed for Stage 2: two rules that both match, but the wrong one fires because priorities weren't set.",
+    "scenario": "Actor bumps into a door. Both of these rules match.",
+    "rules": [
+      {
+        "id": "door_bump_closed",
+        "verb": "bump",
+        "actor_has": ["alive"],
+        "target_has": ["door", "closed"],
+        "priority": 20,
+        "effects": [{"effect": "door_bump", "target": "target"}],
+        "_why_high_priority": "If the door is closed AND locked, we want the locked-door logic to fire first — so its priority is higher (30). If the door is just closed, this rule (20) wins over any generic fallback."
+      },
+      {
+        "id": "door_bump_generic",
+        "verb": "bump",
+        "actor_has": ["alive"],
+        "target_has": ["door"],
+        "priority": 0,
+        "effects": [{"effect": "message", "text": "{actor.name} pushes against the door."}],
+        "_why_low_priority": "Fallback for any door — fires only when no higher-priority door rule matched."
+      }
+    ],
+    "lesson": "When two rules could match the same attempt, set explicit priorities (0-30 typical range). Leave priority at 0 for generic rules; raise it for rules that check more specific tag combinations. Never leave priority off two rules that could collide."
+  },
+
+  "universal_rules": {
+    "_doc": "Rules every Keros world starts with. The bootstrap appends these to any setting-specific rules produced by Stage 2. They give baseline physics for move/wait/melee/eat/drink/give. Settings can layer on top (bribe/pray/forge/trade/etc.) but shouldn't re-write these unless they really mean to.",
+    "rules": [
+      {
+        "id": "move_basic",
+        "verb": "move",
+        "actor_has": ["mobile"],
+        "target_has": ["walkable"],
+        "priority": 0,
+        "effects": [
+          {"effect": "move", "target": "actor", "to": "target.pos"},
+          {"effect": "message", "text": "{actor.name} moves to {target.pos}."}
+        ]
+      },
+      {
+        "id": "wait",
+        "verb": "wait",
+        "actor_has": ["alive"],
+        "priority": -100,
+        "effects": [{"effect": "message", "text": "{actor.name} waits."}]
+      },
+      {
+        "id": "attack_melee",
+        "verb": "attack",
+        "actor_has": ["alive"],
+        "actor_equipped": ["melee"],
+        "target_has": ["alive"],
+        "target_near": true,
+        "priority": 0,
+        "effects": [
+          {"effect": "damage", "target": "target", "formula": "max(1, actor.stats.dmg - target.stats.arm)"},
+          {"effect": "message", "text": "{actor.name} strikes {target.name} for {result.damage}."}
+        ]
+      },
+      {
+        "id": "eat_food",
+        "verb": "use",
+        "actor_has": ["alive"],
+        "item_has": ["food", "consumable"],
+        "priority": 0,
+        "effects": [
+          {"effect": "heal", "target": "actor", "formula": "item.stats.heal"},
+          {"effect": "mod_stat", "target": "actor", "stat": "hunger", "delta": "-item.stats.hunger_relief"},
+          {"effect": "remove_item", "entity": "actor", "item": "item.id"},
+          {"effect": "message", "text": "{actor.name} eats {item.name}."}
+        ]
+      },
+      {
+        "id": "drink_from_skin",
+        "verb": "use",
+        "actor_has": ["alive"],
+        "item_has": ["drink", "consumable"],
+        "priority": 0,
+        "effects": [
+          {"effect": "mod_stat", "target": "actor", "stat": "thirst", "delta": "-item.stats.thirst_relief"},
+          {"effect": "remove_item", "entity": "actor", "item": "item.id"},
+          {"effect": "message", "text": "{actor.name} drinks from {item.name}."}
+        ]
+      },
+      {
+        "id": "give_item",
+        "verb": "give",
+        "actor_has": ["alive"],
+        "target_has": ["alive"],
+        "target_near": true,
+        "priority": 0,
+        "effects": [
+          {"effect": "transfer_item", "from": "actor", "to": "target", "item": "item.id"},
+          {"effect": "message", "text": "{actor.name} gives {item.name} to {target.name}."}
+        ]
+      }
+    ]
+  },
+
+  "universal_statuses": {
+    "_doc": "Statuses every Keros world ships with. The engine additionally auto-applies hunger-tier tags (hungry, starving) and thirst-tier tags (parched, dehydrated) from the stats thresholds above.",
+    "statuses": {
+      "bleeding": {
+        "id": "bleeding",
+        "name": "Bleeding",
+        "tags": ["status", "dot"],
+        "stats": {"dmg_per_turn": 1, "duration": 4},
+        "on_turn": [
+          {"effect": "damage", "target": "bearer", "formula": "status.stats.dmg_per_turn"},
+          {"effect": "message", "text": "{bearer.name} bleeds."}
+        ],
+        "on_expire": [{"effect": "message", "text": "{bearer.name} stops bleeding."}]
+      }
+    }
+  },
+
+  "personality_fields": {
+    "_doc": "All fields are SECOND PERSON ('you are', 'your hands'). Third person silently breaks the interior-monologue spell at runtime because the engine inlines them into a system prompt that begins 'You are {name}.' See runtime.npc_system_prompt_shell.",
+    "identity_anchor":  "3-5 sentences. Core stable ego. Second person. Reference effect of wound, not wound itself.",
+    "body":             "How the body is experienced from inside. Aches, habits, smells. Not a description someone else would give.",
+    "wound":            "The specific fracture that explains why you flinch where you flinch. One event.",
+    "contradictions":   "array of 2-3 '[verb] but [also verb]' internal tensions. Drive behavior variance.",
+    "notices_first":    "one sentence. What senses reach for before thought.",
+    "inner_voice":      "first-person sample of raw interior monologue in single quotes. Rhythm, not content.",
+    "fears":            "specific, lived fears. 'that you will still be here when winter comes' not 'the unknown'.",
+    "comfort":          "what physically releases tension. Sensory.",
+    "traits":           "array of 4-5 observable behaviors. What a neighbor would say.",
+    "drives":           "array of 2-4 current projects. MUST reference verbs that exist in this world's rules and items that exist in templates.",
+    "speech":           "one sentence on rhythm, vocabulary, verbal habits.",
+    "knowledge":        "3-4 specific local facts/rumors.",
+    "plan":             "dawn-to-dusk routine. Specific to work and location."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "crossing",
+  "name": "The Crossing",
+  "desc": "A small stone waypoint where two roads meet. A well in the middle, a bench by the wall.",
+  "grid": [
+    "#############",
+    "#...........#",
+    "#....o......#",
+    "#...........#",
+    "#...........#",
+    "#...........#",
+    "#############"
+  ],
+  "legend": {
+    "#": { "name": "wall",  "tags": ["solid", "opaque"] },
+    ".": { "name": "stone", "tags": ["walkable"] },
+    "o": { "name": "well",  "tags": ["walkable", "water_source"] }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "bleeding": {
+    "id": "bleeding",
+    "name": "Bleeding",
+    "tags": ["status", "dot"],
+    "stats": { "dmg_per_turn": 1, "duration": 4 },
+    "on_turn": [
+      { "effect": "damage", "target": "bearer", "formula": "status.stats.dmg_per_turn" },
+      { "effect": "message", "text": "{bearer.name} bleeds." }
+    ],
+    "on_expire": [
+      { "effect": "message", "text": "{bearer.name} stops bleeding." }
+    ]
+  }
+}

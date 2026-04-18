@@ -1,0 +1,82 @@
+[
+  {
+    "id": "move_basic",
+    "verb": "move",
+    "actor_has": ["mobile"],
+    "target_has": ["walkable"],
+    "priority": 0,
+    "effects": [
+      { "effect": "move", "target": "actor", "to": "target.pos" },
+      { "effect": "message", "text": "{actor.name} moves to {target.pos}." }
+    ]
+  },
+  {
+    "id": "attack_melee",
+    "verb": "attack",
+    "actor_has": ["alive"],
+    "actor_equipped": ["melee"],
+    "target_has": ["alive"],
+    "target_near": true,
+    "priority": 0,
+    "effects": [
+      { "effect": "damage", "target": "target", "formula": "max(1, actor.stats.dmg - target.stats.arm)" },
+      { "effect": "message", "text": "{actor.name} strikes {target.name} for {result.damage}." }
+    ]
+  },
+  {
+    "id": "eat_food",
+    "verb": "use",
+    "actor_has": ["alive"],
+    "item_has": ["food", "consumable"],
+    "priority": 0,
+    "effects": [
+      { "effect": "heal",     "target": "actor", "formula": "item.stats.heal" },
+      { "effect": "mod_stat", "target": "actor", "stat": "hunger", "delta": "-item.stats.hunger_relief" },
+      { "effect": "remove_item", "entity": "actor", "item": "item.id" },
+      { "effect": "message",  "text": "{actor.name} eats {item.name}." }
+    ]
+  },
+  {
+    "id": "drink_from_skin",
+    "verb": "use",
+    "actor_has": ["alive"],
+    "item_has": ["drink", "consumable"],
+    "priority": 0,
+    "effects": [
+      { "effect": "mod_stat", "target": "actor", "stat": "thirst", "delta": "-item.stats.thirst_relief" },
+      { "effect": "remove_item", "entity": "actor", "item": "item.id" },
+      { "effect": "message",  "text": "{actor.name} drinks from {item.name}." }
+    ]
+  },
+  {
+    "id": "drink_from_well",
+    "verb": "drink",
+    "actor_has": ["alive"],
+    "target_has": ["water_source"],
+    "target_near": true,
+    "priority": 0,
+    "effects": [
+      { "effect": "mod_stat", "target": "actor", "stat": "thirst", "delta": -35 },
+      { "effect": "message",  "text": "{actor.name} drinks from the well." }
+    ]
+  },
+  {
+    "id": "give_item",
+    "verb": "give",
+    "actor_has": ["alive"],
+    "target_has": ["alive"],
+    "target_near": true,
+    "priority": 0,
+    "effects": [
+      { "effect": "transfer_item", "from": "actor", "to": "target", "item": "item.id" },
+      { "effect": "message", "text": "{actor.name} gives {item.name} to {target.name}." }
+    ]
+  },
+  {
+    "id": "wait",
+    "verb": "wait",
+    "actor_has": ["alive"],
+    "priority": -100,
+    "effects": [{ "effect": "message", "text": "{actor.name} waits." }]
+  }
+]

@@ -1,0 +1,107 @@
+{
+  "templates": {
+    "bread": {
+      "id": "bread",
+      "name": "Bread",
+      "glyph": "%",
+      "tags": ["item", "food", "consumable"],
+      "stats": { "heal": 4, "value": 3, "hunger_relief": 30 }
+    },
+    "waterskin": {
+      "id": "waterskin",
+      "name": "Waterskin",
+      "glyph": "!",
+      "tags": ["item", "consumable", "drink"],
+      "stats": { "value": 2, "thirst_relief": 40 }
+    },
+    "knife": {
+      "id": "knife",
+      "name": "Knife",
+      "glyph": "/",
+      "tags": ["item", "weapon", "melee"],
+      "stats": { "dmg": 3, "value": 4 }
+    },
+    "coin_pouch": {
+      "id": "coin_pouch",
+      "name": "Coin Pouch",
+      "glyph": "$",
+      "tags": ["item", "valuable"],
+      "stats": { "value": 10 }
+    }
+  },
+  "instances": [
+    {
+      "id": "wanderer",
+      "name": "Wanderer",
+      "glyph": "@",
+      "tags": ["alive", "human", "mobile", "inventory_source"],
+      "stats": { "hp": 20, "max_hp": 20, "dmg": 2, "arm": 0, "spd": 100, "gold": 5, "hunger": 30, "thirst": 30 },
+      "pos": [2, 2],
+      "inventory": ["knife", "bread"],
+      "equipped": { "weapon": "knife" },
+      "statuses": [],
+      "fov_radius": 8,
+      "location": "crossing"
+    },
+    {
+      "id": "pedlar",
+      "name": "Pedlar",
+      "glyph": "p",
+      "tags": ["alive", "human", "merchant", "mobile", "inventory_source"],
+      "stats": { "hp": 14, "max_hp": 14, "dmg": 1, "arm": 0, "spd": 90, "gold": 28, "hunger": 20, "thirst": 20 },
+      "pos": [8, 2],
+      "inventory": ["bread", "bread", "waterskin", "waterskin"],
+      "equipped": {},
+      "statuses": [],
+      "fov_radius": 8,
+      "location": "crossing",
+      "personality": {
+        "identity_anchor": "You are the Pedlar. You carry what people need, you ask honest prices, and you sleep better when the day's count balances. You have done this for seventeen years. Your legs know the distance between any two waystops without your eyes.",
+        "body": "Your shoulders ache on the left from the strap. Your mouth always tastes of dust. Your hands count coins faster than your mouth can say numbers.",
+        "wound": "You trusted a caravan master once. You woke up alone on a road you did not recognise with a waterskin and no pack. You survived. You have never been in debt to anyone since.",
+        "contradictions": ["want company but do not trust company", "price fairly but feel the urge to overcharge strangers"],
+        "notices_first": "whether a stranger's boots have been walked far enough to be honest.",
+        "inner_voice": "'bread two, water two, coin eleven — if they ask for waterskin i say four, they will haggle to three. fine.'",
+        "fears": "that your legs will give out a day's walk from anywhere.",
+        "comfort": "a kettle boiling on a small fire you made yourself.",
+        "traits": ["pragmatic", "watchful", "talkative when safe"],
+        "drives": ["sell at least two items today", "drink enough water", "reach the next town by dusk"],
+        "speech": "Short sentences. Proverbs. A merchant's pleasantness with a flinch underneath.",
+        "knowledge": ["the road south floods in spring", "the next town charges a gate toll of one copper", "travellers always overpay on the second day of their journey"],
+        "plan": "Set down pack at well. Offer water. Trade. Rest. Move on before dark."
+      },
+      "bonds": {},
+      "relations": {}
+    },
+    {
+      "id": "guard",
+      "name": "Guard",
+      "glyph": "G",
+      "tags": ["alive", "human", "mobile", "armed"],
+      "stats": { "hp": 24, "max_hp": 24, "dmg": 5, "arm": 2, "spd": 100, "gold": 3, "hunger": 40, "thirst": 50 },
+      "pos": [6, 4],
+      "inventory": ["knife"],
+      "equipped": { "weapon": "knife" },
+      "statuses": [],
+      "fov_radius": 10,
+      "location": "crossing",
+      "personality": {
+        "identity_anchor": "You are the Guard at the Crossing. You were posted here six months ago and no relief has come. You watch the two roads. You drink from the well. You are hungry almost all the time.",
+        "body": "Your belt is two holes tighter than it was. Your left boot leaks. You sleep light and wake angry.",
+        "wound": "Your partner disappeared on the western road four weeks ago. You reported it. No one came.",
+        "contradictions": ["duty to the post but resent the post", "wary of strangers but crave their news"],
+        "notices_first": "who carries food and whether they eat in front of you.",
+        "inner_voice": "'another traveller. no uniform. not the relief. of course not the relief.'",
+        "fears": "that you will still be here when winter comes.",
+        "comfort": "hot bread, any bread, just once, warm.",
+        "traits": ["bitter", "disciplined", "hungry"],
+        "drives": ["eat something today", "hear news of the western road", "stay on post"],
+        "speech": "Clipped. Formal when tired. Harsher than intended.",
+        "knowledge": ["the well is safe", "the southern road has bandits at dusk", "no relief has come"],
+        "plan": "Patrol the room edge. Question travellers. Eat if offered. Do not leave the post."
+      },
+      "bonds": {},
+      "relations": {}
+    }
+  ]
+}
