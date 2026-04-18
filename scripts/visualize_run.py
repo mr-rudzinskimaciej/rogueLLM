@@ -269,6 +269,22 @@ pre.map .ent{color:var(--yellow);text-shadow:0 0 8px rgba(255,215,74,.7)}
 .being.static .name{color:#d3a2ff;text-shadow:0 0 5px rgba(211,162,255,.35)}
 .static-tag{color:#d3a2ff;font-style:italic}
 
+.drives-block{margin-top:6px;border-top:1px dashed var(--border);padding-top:5px;font-size:11px}
+.ceiling-badge,.preempt-badge{display:inline-block;padding:0 6px;margin-right:4px;margin-bottom:2px;border:1px solid var(--border);font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+.ceiling-badge{color:var(--fg2)}
+.preempt-badge{color:var(--red);border-color:#5b2020;background:rgba(91,32,32,.25);animation:pulse 1.2s ease-out}
+.drive-row{margin-top:3px;display:flex;gap:6px;align-items:flex-start}
+.drive-alt{flex:0 0 44px;padding:1px 4px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--border);text-align:center}
+.drive-row.alt-body .drive-alt{color:#ff8a8a;border-color:#5b2020}
+.drive-row.alt-scene .drive-alt{color:#7dd3ff;border-color:#1b4b62}
+.drive-row.alt-arc .drive-alt{color:#ffae5a;border-color:#55391a}
+.drive{flex:1;display:flex;gap:6px;align-items:center}
+.drive-carried{opacity:.4;text-decoration:line-through solid rgba(255,255,255,.15)}
+.drive-text{flex:1}
+.drive-phase{color:var(--dim);font-size:10px}
+.drive-load{display:inline-block;width:24px;height:3px;background:#222;position:relative;vertical-align:middle}
+.drive-load span{position:absolute;inset:0 auto 0 0;background:var(--yellow)}
+
 .events{display:flex;flex-direction:column;gap:2px;max-height:50vh;overflow:auto}
 .ev{padding:2px 6px;border-left:2px solid transparent}
 .ev.narrator{color:var(--accent);border-left-color:var(--accent);
@@ -467,6 +483,43 @@ function statBar(cls, cur, max) {
   return `<span class="bar ${cls}"><span style="width:${pct}%"></span></span>`;
 }
 
+const ALTITUDE_ORDER = ['body', 'scene', 'arc'];
+const ALTITUDE_CLASS = {'body':'alt-body','scene':'alt-scene','arc':'alt-arc'};
+
+function renderDrivesBlock(entity) {
+  const pers = entity.personality || {};
+  const raw = pers.drives || [];
+  if (!raw.length) return '';
+  const ceiling = pers.ceiling || '';
+  const stats = entity.stats || {};
+  const preempting = (stats.hunger||0) >= 60 || (stats.thirst||0) >= 60 ||
+                     ((stats.max_hp && stats.hp) ? (stats.hp <= stats.max_hp*0.33) : false);
+  // Normalize to {text, altitude, status, phase, phases, load} on the fly
+  const norm = raw.map(d => typeof d === 'string'
+    ? { text: d, altitude: 'scene', status: 'active', phase: 0, phases:[d] }
+    : { text: d.text||'', altitude: d.altitude||d.tier||'scene', status: d.status||'active',
+        phase: d.phase||0, phases: d.phases||[d.text||''], load: d.load });
+  const byAlt = { body: [], scene: [], arc: [] };
+  for (const d of norm) {
+    if (d.status === 'met') continue;
+    if (byAlt[d.altitude]) byAlt[d.altitude].push(d);
+  }
+  const rows = [];
+  for (const alt of ALTITUDE_ORDER) {
+    if (!byAlt[alt].length) continue;
+    const items = byAlt[alt].map(d => {
+      const carried = preempting && alt !== 'body';
+      const loadBar = d.load !== undefined ? `<span class="drive-load" title="load ${d.load}"><span style="width:${Math.round((d.load||0)*100)}%"></span></span>` : '';
+      const phaseTag = (d.phases && d.phases.length > 1) ? `<span class="drive-phase">${d.phase+1}/${d.phases.length}</span>` : '';
+      return `<div class="drive ${carried?'drive-carried':''}">${loadBar}<span class="drive-text">${escapeHtml(d.text)}</span>${phaseTag}</div>`;
+    }).join('');
+    rows.push(`<div class="drive-row ${ALTITUDE_CLASS[alt]}"><span class="drive-alt">${alt}</span>${items}</div>`);
+  }
+  const ceilBadge = ceiling ? `<span class="ceiling-badge">ceil:${ceiling}</span>` : '';
+  const preemptBadge = preempting ? `<span class="preempt-badge">body preempt</span>` : '';
+  return `<div class="drives-block">${ceilBadge}${preemptBadge}${rows.join('')}</div>`;
+}
+
 function renderBeings(frame) {
   const ents = frame.entities || {};
   // Show: anything alive/mobile OR anything with a personality block (like Mszota echo).
@@ -508,6 +561,7 @@ function renderBeings(frame) {
       <span class="pos">[${(e.pos||[0,0]).join(', ')}] @ ${escapeHtml(e.location||'?')}</span>
       ${statsRow}
       <div class="tags">${escapeHtml(tagsStr)}</div>
+      ${renderDrivesBlock(e)}
     </div>`;
   }).join('') || '<div class="empty">no beings</div>';
 }

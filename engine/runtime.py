@@ -614,9 +614,9 @@ def build_weaver_prompt(engine: GameEngine, max_history: int = 30) -> str:
         inv_str = f" inv:[{', '.join(inv[:4])}]" if inv else " inv:[]"
         parts.append(f"{eid} @ {loc} | HP:{hp}/{max_hp} H:{hunger} T:{thirst}{inv_str}")
         pers = ent.get("personality", {})
-        drives = pers.get("drives", [])
-        if drives:
-            parts.append(f"  drives: {', '.join(drives[:3])}")
+        if pers.get("drives"):
+            from .drives import format_drives_for_gm
+            parts.extend(format_drives_for_gm(ent, turn=state.turn))
         bonds = ent.get("bonds", {})
         if bonds:
             bond_summary = "; ".join(f"{k}: {str(v)[:40]}" for k, v in list(bonds.items())[:3])
@@ -864,9 +864,11 @@ def build_gm_resolver_prompt(
         if inv:
             line += f"\n  inv: {', '.join(inv[:6])}"
         pers = actor.get("personality", {})
-        drives = pers.get("drives", [])
-        if drives:
-            line += f"\n  drives: {', '.join(drives[:2])}"
+        if pers.get("drives"):
+            from .drives import format_drives_for_gm
+            drive_lines = format_drives_for_gm(actor, turn=state.turn, max_per_altitude=2)
+            if drive_lines:
+                line += "\n" + "\n".join(drive_lines)
         knowledge = pers.get("knowledge", [])
         if knowledge:
             line += f"\n  knows: {', '.join(knowledge[:2])}"
@@ -927,6 +929,8 @@ def parse_gm_actions(raw: str, max_actions: int = 3) -> list[dict[str, Any]]:
                 actions.append({"verb": "remove_tag", "entity_id": tokens[1], "tag": tokens[2]})
             elif verb == "spawn" and len(tokens) >= 4:
                 actions.append({"verb": "spawn", "template": tokens[1], "x": _safe_int(tokens[2]), "y": _safe_int(tokens[3]), "new_id": tokens[4] if len(tokens) > 4 else tokens[1]})
+            elif verb == "advance" and len(tokens) >= 3:
+                actions.append({"verb": "advance", "entity_id": tokens[1], "drive_idx": _safe_int(tokens[2])})
             elif verb == "give" and len(tokens) >= 3:
                 actions.append({"verb": "give", "entity_id": tokens[1], "item": tokens[2], "count": _safe_int(tokens[3], 1) if len(tokens) > 3 else 1})
             elif verb == "plan" and len(tokens) >= 3:
@@ -1000,6 +1004,18 @@ def apply_gm_action(engine: GameEngine, action: dict[str, Any], config: RuntimeC
     if verb == "narrate":
         engine.log_event(f"NARRATOR: {action['text']}", None, engine.state.current_map_id, source="gm")
         return "narrate"
+    if verb == "advance":
+        from .drives import promote_drive
+        entity = engine.get_entity(action["entity_id"])
+        res = promote_drive(entity, int(action.get("drive_idx", 0)), engine.state.turn)
+        if res.get("ok"):
+            status = res.get("status", "?")
+            if status == "met":
+                lifted = res.get("lifted", "")
+                tail = f" → lifted: {lifted}" if lifted else ""
+                return f"advance->{entity['id']}#{action['drive_idx']} met{tail}"
+            return f"advance->{entity['id']}#{action['drive_idx']} phase {res.get('new_phase')}"
+        return f"advance_failed: {res.get('reason','?')}"
     if verb == "event":
         if action["map_id"] not in engine.state.maps:
             return "event_skipped_unknown_map"

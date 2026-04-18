@@ -797,9 +797,10 @@ class GameEngine:
         parts.append("")
 
         # --- Plan and drives ---
-        drives = personality.get("drives") or personality.get("goals", [])
-        if drives:
-            parts.append(f"What drives you: {', '.join(drives)}")
+        from .drives import format_active_drives_block
+        drive_lines = format_active_drives_block(actor, self.state.turn)
+        if drive_lines:
+            parts.extend(drive_lines)
         knowledge = personality.get("knowledge", [])
         if knowledge:
             parts.append(f"You know: {'; '.join(knowledge)}")

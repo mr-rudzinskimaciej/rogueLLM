@@ -908,23 +908,63 @@ A drive has five shapes you must author. Hold them all before writing.
     moment. Jaromir's "pray for a login" is load 0.9 — he does not
     act on it every turn but it colours every other action.
 
+=== DRIVES LIVE ON THREE ALTITUDES (ladder with gravity) ===
+
+Every being's drives sit at one of three altitudes:
+
+  body  — hunger, thirst, injury, cold, sleep. Bodily needs. Tactical
+          now. Rules of physics, not character.
+  scene — belonging, recognition, relationship, role-in-this-place.
+          Why the being is HERE rather than elsewhere. Things a
+          neighbour would name.
+  arc   — the arc-question this being walks with. Who are you now?
+          What are you carrying over a lifetime? What would you die
+          without knowing?
+
+The being's `ceiling` caps how high their drives reach:
+
+  ceiling=body   — flesh_dwellers, beasts, feral things, children
+                   who have not yet grown language for more.
+  ceiling=scene  — merchants, guards, craftspeople, priests, post-
+                   holders. Most named townsfolk.
+  ceiling=arc    — heroes, protagonists, meta-aware beings,
+                   characters the lore names as carrying something.
+                   A being whose PLAYER, IF ANY, asked "why did they
+                   come today" and the answer is more than chores.
+
+BODY HAS GRAVITY. If a being's hunger or thirst is sharp (>=60),
+their body-altitude drives re-latch and preempt scene/arc drives for
+that turn. A hero with an existential question still has a stomach.
+This is the mechanism by which turn-1 is always actionable.
+
+AUTHORING RULE: a being of ceiling=C must have AT LEAST ONE drive at
+every altitude up to C. A hero must have at least one body drive, at
+least one scene drive, and at least one arc drive. A flesh-dweller
+has body drives only. A merchant has body and scene.
+
 === DRIVES OUTPUT SHAPE ===
 
 Drives are an array of OBJECTS, not strings. Each object:
 
 {
   "text": "<one sentence, concrete, references a map feature / being / item>",
+  "altitude": "body" | "scene" | "arc",
   "phase": 0,
   "phases": ["<phase 0 sub-goal>", "<phase 1 sub-goal>", "<phase 2 sub-goal>"],
   "load": 0.0-1.0,
   "dormant_until": null,
-  "advances_on": "<plain-English trigger for phase++>"
+  "advances_on": "<plain-English trigger for phase++>",
+  "status": "active"
 }
 
+On the personality root (not on drives), add:
+
+  "ceiling": "body" | "scene" | "arc"
+
 Runtime note: older worlds that ship plain-string drives are auto-
-promoted to this shape with {phase:0, phases:[text], load:0.5,
-dormant_until:null, advances_on:null}. Ship the rich shape on any
-new world.
+promoted to {altitude:"scene", status:"active", phase:0, phases:[text],
+load:0.5, dormant_until:null, advances_on:null}. Ship the rich shape
+on any new world.
 
 === BAD vs. GOOD drives ===
 
@@ -938,10 +978,12 @@ BAD (Jaromir, current — three chores, each fires every turn forever):
   // and turn 50. It is a treadmill. It wastes tokens and flattens the
   // character into a ritual loop.
 
-GOOD (Jaromir, shaped):
+GOOD (Jaromir, shaped — ceiling=arc, one drive per altitude):
+  "ceiling": "arc",
   drives: [
     {
       "text": "pray at the player-shrine to hear whether the login chime still answers",
+      "altitude": "arc",
       "phase": 0,
       "phases": [
         "pray and listen for the chime",
@@ -950,10 +992,12 @@ GOOD (Jaromir, shaped):
       ],
       "load": 0.9,
       "dormant_until": null,
-      "advances_on": "the player prays at the shrine OR a meta-aware being names the chime"
+      "advances_on": "the player prays at the shrine OR a meta-aware being names the chime",
+      "status": "active"
     },
     {
-      "text": "keep Weronika alive through the next shutdown rumour",
+      "text": "keep Weronika within sight through the next shutdown rumour",
+      "altitude": "scene",
       "phase": 0,
       "phases": [
         "stay within sight of Weronika",
@@ -962,15 +1006,18 @@ GOOD (Jaromir, shaped):
       ],
       "load": 0.7,
       "dormant_until": null,
-      "advances_on": "Weronika speaks the shutdown rumour aloud in Jaromir's FOV"
+      "advances_on": "Weronika speaks the shutdown rumour aloud in Jaromir's FOV",
+      "status": "active"
     },
     {
       "text": "drink from the gastric pool before thirst sharpens",
+      "altitude": "body",
       "phase": 0,
       "phases": ["drink when thirst > 50"],
       "load": 0.2,
       "dormant_until": null,
-      "advances_on": "thirst < 20 → dormant for 15 turns"
+      "advances_on": "thirst < 20 → dormant for 15 turns",
+      "status": "active"
     }
   ]
 
@@ -984,10 +1031,19 @@ when satisfied.
 === CONSTRAINTS ===
 
 - 2-4 drives per being. Three is the sweet spot.
+- Set a `ceiling` on personality: body | scene | arc. Infer from tags
+  if not obvious — heroes/meta_aware/protagonist → arc, merchants/
+  guards/post-holders → scene, flesh_dwellers/beasts → body.
+- A being of ceiling=arc MUST have at least one drive at each of
+  body/scene/arc. Scene ceiling MUST have at least one body and one
+  scene. Body ceiling has only body drives. No drive may sit above
+  the ceiling.
 - At least ONE drive must have a turn-1 tangent (actionable immediately
-  with a verb this world has).
+  with a verb this world has). Body drives are the natural tangent
+  because body pressure preempts.
 - At least ONE drive must have load >= 0.6 — something the being
-  CARRIES, not just TO-DOs.
+  CARRIES, not just TO-DOs. This should usually be the arc drive
+  for heroes.
 - At least ONE drive must have a non-trivial `advances_on` naming a
   world event (another being's action, a threshold crossing, an item
   passing into someone's inventory). Not all three drives should; a
