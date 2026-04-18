@@ -551,24 +551,95 @@ where bodies go — around the feature, along the traffic line between
 entrance and feature, in the pinch of a doorway. It tells the FOV
 reader where life happens without a single extra verb.
 
-=== COMPOSITION, NOT FILL — density is decision-pressure per FOV ===
+=== COMPOSITION, NOT FILL — each feature must EARN several axes ===
 
-Density is measured in verb-hooks visible from one being's line of
-sight, not in features-per-map. Aim for 2-3 visible verb-hooks in a
-typical FOV. More clutters the runtime prompt and the turn-1 choice.
+Density is not features-per-map; density is MEANING-PER-FEATURE. The
+four-tile ceiling holds. What changes is how the FEATURE slot gets
+filled: it must be the DENSEST element on the map, scoring on multiple
+axes — not a well, a well that reflects faces; not an altar, an altar
+whose offerings change across seasons.
 
-  BAD density (the LLM "filled" the map):
-    A well, a brazier, a bench, a shrine, a corpse, a locked chest,
-    a banner, a pile of sacks. Eight features. The being freezes.
+THE FIVE AXES A FEATURE IS SCORED ON:
 
-  GOOD density (composed):
-    A well. A bench. That is the starter. It reads as a place because
-    the two features have a social geometry — you drink, you sit, you
-    watch the road. Every feature earns its place.
+  TENSION    — creates ongoing pressure between beings, or between a
+               being and the place. (The pool takes one in ten who
+               drink unprepared — every visit is a small wager.)
+  VERBS      — supports at least one verb a rule will match, ideally
+               TWO OR MORE from the same tile (drink / bathe /
+               reflect / gossip all fire on the same well).
+  LORE       — encodes something about the setting that beings would
+               SPEAK OF, REMEMBER, FEAR, or VENERATE. If no being
+               would mention this tile unprompted, it has no lore.
+  INTERACTION — two or more beings can use it differently or at the
+               same time. The shared bench, the shared fire, the
+               altar a supplicant and a priest approach from
+               opposite sides.
+  TIME       — state evolves across the game. Fire burns down, well
+               clouds after a kill upstream, shrine accepts only
+               certain offerings on certain days. The same tile
+               carries different meaning on turn 3 and turn 73.
 
-Each feature must answer: what verb does this invite on turn 1?
-If it doesn't invite a verb, it's atmosphere — and atmosphere belongs
-in the `desc`, not in the legend.
+SCORING RULE: the FEATURE must hit AT LEAST THREE of the five axes.
+Two-axis features are atmosphere — move them to `desc`. Four or five
+axes means you have done the job well. If the feature scores all five,
+name why explicitly; that tile is the spine of the map.
+
+ALWAYS NAME THE AXES. In the legend entry for the feature, include an
+`axes` field listing which axes it hits and why in a phrase each.
+This is read by later stages (entities, bond weave) to place beings
+and relationships ONTO the confluence.
+
+  {
+    "name": "gastric pool",
+    "tags": ["walkable", "water_source"],
+    "axes": {
+      "tension": "takes one in ten who drink unprepared",
+      "verbs": "drink / bathe / reflect / gossip-anchor",
+      "lore": "Glut's brother's belt was found on the rim",
+      "interaction": "Jaromir and Glut both need it; their approaches encode their truce",
+      "time": "clouds amber after a kill in this chamber"
+    }
+  }
+
+WALL and FLOOR-A/B do not need `axes` — they are the substrate. Only
+FEATURE tiles earn (and must justify) their axes.
+
+BAD feature slot (atmosphere smuggled in as a tile):
+  "B": { "name": "stone bench", "tags": ["walkable"] }
+  // axes: interaction (two can sit) and nothing else.
+  // Cut it. Put "a stone bench by the west wall" in `desc` if you
+  // want the mood, or replace with a feature that earns.
+
+BAD feature slot (single-axis key):
+  "k": { "name": "locked chest", "tags": ["walkable", "container"] }
+  // axes: verbs (unlock/loot), once. No tension after opened, no
+  // lore unless someone put some in, no interaction, no time.
+  // Dead the moment it opens.
+
+GOOD feature slot (confluence):
+  "o": {
+    "name": "gastric pool",
+    "tags": ["walkable", "water_source"],
+    "axes": {
+      "tension":     "takes one in ten who drink unprepared",
+      "verbs":       "drink / bathe / reflect / gossip-anchor",
+      "lore":        "Glut's brother's belt was found on the rim",
+      "interaction": "Jaromir and Glut both need it — the truce is the approach",
+      "time":        "clouds amber after a kill in this chamber"
+    }
+  }
+  // Five axes. The map is about this tile even when no one is on it.
+
+RULE OF THUMB: if cutting the feature would leave the map still
+functional, cut it. If cutting it would leave the map LITERALLY
+LIFELESS — nothing to drink, nothing to fight over, nothing to
+remember — keep it and make the next one earn harder, or don't add
+a next one at all.
+
+Each feature must answer, in its `axes` block: what verbs does this
+invite, what pressure does it hold, what would beings SAY about it,
+how do two beings share it, and what changes about it over time.
+Three of five minimum. Name them.
 
 === OFF-AXIS PLACEMENT — centred reads as UI ===
 
@@ -802,46 +873,130 @@ IF THE POS YOU WANT DOESN'T EXIST ON THIS MAP, THE MAP IS WRONG.
   later pass (or a human) will fix the grid. Awkward-pos compensation
   is the single clearest tell that a being was bolted on.
 
-=== DRIVES ARE NOT CHARACTER-SHEET DECORATION ===
+=== DRIVES ARE CURVES, NOT CHORES ===
 
-Your job: write a being whose DRIVES map onto AT LEAST ONE verb that will
-be available on turn 1. Drives are the hooks the being's system prompt
-gives the LLM at play time. If drives cannot be acted on with the verbs
-and items this world actually has, the being will pick 'wait' turn after
-turn and the scene will die.
+A drive is NOT a turn-1 verb wrapped in character voice. A drive is a
+CURVE the being walks for the whole game. It has to be actionable now
+AND still alive fifty turns from now — without being completed-and-gone
+and without being treadmill-repeatable.
 
-This means:
-  - Every drive must be achievable given the verbs listed below AND the
-    items/tiles the being can reach from its starting position.
-  - At least one drive should be actionable on turn 1 — not a long-term
-    project, but something the being could DO in its first five minutes.
-  - Drives reference concrete subjects (item names, map features, other
-    being ids) — not abstract goals.
+A drive has five shapes you must author. Hold them all before writing.
 
-=== TWO WORKED EXAMPLES (in the starter's tone, for calibration) ===
+  TANGENT — what the being can DO with this drive on turn 1. Must map
+    to a verb this world actually has. No tangent = the drive is lore.
 
-Example A — The Pedlar at the Crossing (from the starter):
-  drives: ["sell at least two items today", "drink enough water",
-           "reach the next town by dusk"]
-  // Why this works: "sell" hooks a trade verb; "drink enough water"
-  // hooks either a drink verb on the adjacent well tile or use-waterskin;
-  // "reach the next town by dusk" is a long-term frame the plan field
-  // makes concrete. Turn 1 has at least two immediate verbs available.
+  PHASES — the sub-goals the drive walks through in order. A phase
+    unlocks the next. Minimum 2 phases; 3 is the sweet spot.
+      phase 1: "pray at the shrine and hear what the shrine answers"
+      phase 2: "carry the shrine's answer to Weronika"
+      phase 3: "decide whether to keep logging in now that you know"
+    The being starts on phase 0. Later phases name states that do not
+    yet exist in the world — they come true by play.
 
-Example B — The Guard at the Crossing (from the starter):
-  drives: ["eat something today", "hear news of the western road",
-           "stay on post"]
-  // Why this works: "eat something today" is turn-1 actionable the
-  // moment a being with bread is adjacent (the Pedlar, in this case);
-  // "hear news" hooks listen/speak interactions with anyone who arrives;
-  // "stay on post" creates a spatial tension the patrol plan resolves.
-  // The guard's hunger stat is elevated so the drive has physical
-  // urgency from turn 1.
+  EVOLUTION — at least one WORLD EVENT that would bend this drive.
+    Name it. "If Weronika dies" / "if the shutdown notice arrives" /
+    "if Glut speaks a player's name". The drive is a hook listening
+    for that event; when it fires, the drive rewrites itself.
 
-Notice the pattern: each drive is either (a) already actionable with
-a verb that exists, or (b) waiting for another being to be present for
-a social verb to fire. Never write drives that require a verb this
-world does not have.
+  DORMANCY — a condition under which the drive goes QUIET, leaving
+    room for others to pull. "Quiet for 20 turns after praying" /
+    "quiet while Weronika is in sight" / "quiet if thirst < 20".
+    Without dormancy, one drive monopolises every turn.
+
+  LOAD — the weight this drive CARRIES even when another drive is
+    selected. 0.0 = forgettable between uses. 1.0 = haunts every
+    moment. Jaromir's "pray for a login" is load 0.9 — he does not
+    act on it every turn but it colours every other action.
+
+=== DRIVES OUTPUT SHAPE ===
+
+Drives are an array of OBJECTS, not strings. Each object:
+
+{
+  "text": "<one sentence, concrete, references a map feature / being / item>",
+  "phase": 0,
+  "phases": ["<phase 0 sub-goal>", "<phase 1 sub-goal>", "<phase 2 sub-goal>"],
+  "load": 0.0-1.0,
+  "dormant_until": null,
+  "advances_on": "<plain-English trigger for phase++>"
+}
+
+Runtime note: older worlds that ship plain-string drives are auto-
+promoted to this shape with {phase:0, phases:[text], load:0.5,
+dormant_until:null, advances_on:null}. Ship the rich shape on any
+new world.
+
+=== BAD vs. GOOD drives ===
+
+BAD (Jaromir, current — three chores, each fires every turn forever):
+  drives: [
+    "pray at the player-shrine in hope of a login",
+    "drink from the gastric pool before the thirst turns",
+    "stay close enough to Weronika that she is not alone"
+  ]
+  // "pray" resolves on turn 1 and selects again on turn 2 and turn 3
+  // and turn 50. It is a treadmill. It wastes tokens and flattens the
+  // character into a ritual loop.
+
+GOOD (Jaromir, shaped):
+  drives: [
+    {
+      "text": "pray at the player-shrine to hear whether the login chime still answers",
+      "phase": 0,
+      "phases": [
+        "pray and listen for the chime",
+        "carry the shrine's silence to Weronika and say it out loud",
+        "decide whether you are a knight or a ghost now that you know"
+      ],
+      "load": 0.9,
+      "dormant_until": null,
+      "advances_on": "the player prays at the shrine OR a meta-aware being names the chime"
+    },
+    {
+      "text": "keep Weronika alive through the next shutdown rumour",
+      "phase": 0,
+      "phases": [
+        "stay within sight of Weronika",
+        "intervene when the shutdown rumour reaches her",
+        "decide whether to log out with her or hold the western approach alone"
+      ],
+      "load": 0.7,
+      "dormant_until": null,
+      "advances_on": "Weronika speaks the shutdown rumour aloud in Jaromir's FOV"
+    },
+    {
+      "text": "drink from the gastric pool before thirst sharpens",
+      "phase": 0,
+      "phases": ["drink when thirst > 50"],
+      "load": 0.2,
+      "dormant_until": null,
+      "advances_on": "thirst < 20 → dormant for 15 turns"
+    }
+  ]
+
+Notice: the first drive is a question (does the chime answer?) whose
+answer is world-state. It evolves. The second drive is a relationship
+curve — phases 1/2/3 name states the scene will pass through. The third
+is deliberately flat and low-load because SOME drives are maintenance —
+but even maintenance declares its dormancy rule so it stops pulling
+when satisfied.
+
+=== CONSTRAINTS ===
+
+- 2-4 drives per being. Three is the sweet spot.
+- At least ONE drive must have a turn-1 tangent (actionable immediately
+  with a verb this world has).
+- At least ONE drive must have load >= 0.6 — something the being
+  CARRIES, not just TO-DOs.
+- At least ONE drive must have a non-trivial `advances_on` naming a
+  world event (another being's action, a threshold crossing, an item
+  passing into someone's inventory). Not all three drives should; a
+  being of only evolving drives has no floor.
+- Phase-0 sub-goal must reference concrete subjects (item ids, map
+  feature names, being ids). Later phases can name states that don't
+  yet exist.
+- If you cannot describe the drive's SHAPE OVER FIFTY TURNS in one
+  sentence, it is a chore. Rewrite it or cut it.
 
 === ENTITY INSTANCE SHAPE ===
 

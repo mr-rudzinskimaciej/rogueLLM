@@ -347,6 +347,8 @@ One line per action. No commentary."""
                 print(f"  [breath error: {type(exc).__name__}: {exc}]")
         return applied
 
+    weaver_log: list[dict[str, Any]] = []  # per-fire record: turn, raw, actions, results
+
     def run_weaver(engine) -> int:
         """Invoke the Weaver (GM_ANTERIOR / 'The Accumulation') — fires FIRST every
         weaver_interval turns. Names pressure gradients; does not resolve them."""
@@ -360,9 +362,21 @@ One line per action. No commentary."""
         try:
             actions = parse_weaver_output(raw)
             results = apply_weaver_output(engine, actions)
+            weaver_log.append({
+                "turn": engine.state.turn,
+                "raw": raw[:2000],
+                "actions": actions,
+                "results": results,
+            })
+            if actions:
+                for a in actions[:3]:
+                    print(f"  [weaver] {a}")
+            else:
+                print(f"  [weaver] (pass — no gradients named this turn)")
             return len(results)
         except Exception as exc:
             print(f"  [weaver error: {type(exc).__name__}: {exc}]")
+            weaver_log.append({"turn": engine.state.turn, "raw": raw[:500], "error": str(exc)})
             return 0
 
     def auto_player(_actor, _engine):
@@ -464,6 +478,14 @@ One line per action. No commentary."""
                 snap = capture_obj["frames"][-1].get("state") or {}
                 if "turn" in snap:
                     snap["turn"] = current_turn
+                # Include engine.state.flags snapshot — Weaver gradients live
+                # here, along with weaver_queue and anything else the GMs plant
+                # in shared state. Without this the viewer can't show what the
+                # Weaver is building.
+                try:
+                    snap["flags"] = json.loads(json.dumps(engine.state.flags, default=str))
+                except Exception:
+                    snap["flags"] = {}
             capture_obj["meta"]["role_calls"].append({
                 "turn": current_turn, "roles": role_counts,
                 "prompt": pt, "completion": ct, "cost": cost,
@@ -504,8 +526,9 @@ One line per action. No commentary."""
         print("Watch the 'in' column above — if it climbs each turn, scale it.")
 
     if capture_enabled:
+        capture_obj.setdefault("meta", {})["weaver_log"] = weaver_log
         out = save_capture(capture_obj, args.capture, engine)
-        print(f"\n[capture] wrote {out}")
+        print(f"\n[capture] wrote {out}  (weaver fires: {len(weaver_log)})")
 
     return 0
 

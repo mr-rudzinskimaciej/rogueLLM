@@ -140,6 +140,11 @@ def render(capture: dict[str, Any], title: str = "Keros Replay") -> str:
         # Role calls / cost for this turn (if present)
         rc = next((r for r in role_calls if r.get("turn") == frame.get("turn")), None)
 
+        # Weaver state — gradients + queue from engine.state.flags, if captured
+        flags = state.get("flags") or {}
+        weaver_gradients = flags.get("weaver_gradients") or {}
+        weaver_queue = flags.get("weaver_queue") or []
+
         per_turn.append({
             "turn": frame.get("turn"),
             "map_id": map_id,
@@ -148,6 +153,8 @@ def render(capture: dict[str, Any], title: str = "Keros Replay") -> str:
             "public": public_items,
             "private": private_by_being,
             "role_calls": rc,
+            "weaver_gradients": weaver_gradients,
+            "weaver_queue": weaver_queue,
         })
 
     # Everything needed client-side
@@ -307,6 +314,25 @@ pre.map .ent{color:var(--yellow);text-shadow:0 0 8px rgba(255,215,74,.7)}
 
 .kbdhint{color:var(--dim);font-size:11px;margin-left:auto}
 .empty{color:var(--dim);font-style:italic;padding:8px 12px}
+
+.weaver-panel{margin-top:16px}
+.weaver-badge{display:inline-block;padding:0 8px;border:1px solid var(--border);border-radius:2px;margin-right:4px;font-weight:700;letter-spacing:.15em}
+.weaver-badge.on{color:#ffae5a;border-color:#55391a;background:rgba(85,57,26,.25);text-shadow:0 0 6px rgba(255,174,90,.4)}
+.weaver-badge.off{color:var(--dim)}
+.grad{border:1px solid var(--border);padding:6px 10px;margin-bottom:6px;background:rgba(22,17,12,.45)}
+.grad-new{border-color:#ffae5a;box-shadow:0 0 10px rgba(255,174,90,.25);animation:pulse 1.2s ease-out}
+@keyframes pulse{0%{box-shadow:0 0 0 rgba(255,174,90,0)}50%{box-shadow:0 0 18px rgba(255,174,90,.55)}100%{box-shadow:0 0 10px rgba(255,174,90,.25)}}
+.grad-closed{opacity:.5;border-style:dashed}
+.grad-just-closed{border-style:dashed;color:var(--dim);background:transparent}
+.grad-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:3px}
+.grad-name{color:#ffae5a;font-weight:700;letter-spacing:.04em}
+.grad-mark{font-size:10px;padding:0 6px;border:1px solid var(--border);letter-spacing:.1em}
+.grad-mark.new{color:#ffae5a;border-color:#55391a}
+.grad-mark.closed{color:var(--dim)}
+.grad-mark.t{color:var(--cyan);border-color:#1b4b62}
+.grad-actors{color:var(--fg2);font-size:11px;margin-left:auto}
+.grad-pressure{color:var(--fg);font-size:12px}
+.grad-hint{color:var(--dim);font-size:11px;font-style:italic;margin-top:2px}
 </style>
 </head>
 <body>
@@ -337,6 +363,11 @@ pre.map .ent{color:var(--yellow);text-shadow:0 0 8px rgba(255,215,74,.7)}
       <h2>Beings <small id="beingsSub"></small></h2>
       <div class="body beings" id="beings"></div>
     </div>
+  </div>
+
+  <div class="panel weaver-panel">
+    <h2>Weaver — the Accumulation <small id="weaverSub"></small></h2>
+    <div class="body" id="weaver"></div>
   </div>
 
   <div class="row2">
@@ -503,6 +534,60 @@ function renderPrivate(frame) {
   }).join('');
 }
 
+let prevGradientNames = new Set();
+
+function renderWeaver(frame, prevFrame) {
+  const grads = frame.weaver_gradients || {};
+  const queue = frame.weaver_queue || [];
+  const roles = (frame.role_calls && frame.role_calls.roles) || {};
+  const firedThisTurn = (roles.weaver || 0) > 0;
+  const names = new Set(Object.keys(grads));
+  const prevNames = new Set(Object.keys((prevFrame && prevFrame.weaver_gradients) || {}));
+  const openedNow = [...names].filter(n => !prevNames.has(n));
+  const closedNow = [...prevNames].filter(n => !names.has(n));
+
+  $('weaverSub').innerHTML =
+    `<span class="weaver-badge ${firedThisTurn?'on':'off'}">${firedThisTurn?'FIRED':'dormant'}</span>` +
+    ` &middot; ${Object.keys(grads).length} active gradient${Object.keys(grads).length===1?'':'s'}` +
+    (queue.length ? ` &middot; queue:${queue.length}` : '');
+
+  if (!Object.keys(grads).length && !closedNow.length) {
+    $('weaver').innerHTML =
+      firedThisTurn
+        ? '<div class="empty">Weaver fired — no gradients survived parsing.</div>'
+        : '<div class="empty">Weaver dormant this turn — next fire on an interval boundary.</div>';
+    return;
+  }
+
+  const gradItems = Object.entries(grads).map(([gname, g]) => {
+    const pressure = g.pressure || '(no pressure text)';
+    const actors = (g.actors || []).join(', ');
+    const threshold = g.threshold_turn ? `T${g.threshold_turn}` : '';
+    const hint = g.hint || '';
+    const status = g.status || 'open';
+    const isNew = openedNow.includes(gname);
+    const classes = 'grad' + (isNew ? ' grad-new' : '') + (status === 'closed' ? ' grad-closed' : '');
+    return `
+      <div class="${classes}">
+        <div class="grad-head">
+          <span class="grad-name">${escapeHtml(gname)}</span>
+          ${isNew ? '<span class="grad-mark new">NEW</span>' : ''}
+          ${status === 'closed' ? '<span class="grad-mark closed">CLOSED</span>' : ''}
+          ${threshold ? `<span class="grad-mark t">${escapeHtml(threshold)}</span>` : ''}
+          ${actors ? `<span class="grad-actors">${escapeHtml(actors)}</span>` : ''}
+        </div>
+        <div class="grad-pressure">${escapeHtml(pressure)}</div>
+        ${hint ? `<div class="grad-hint">↳ hint: ${escapeHtml(hint)}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const closedItems = closedNow.map(gname =>
+    `<div class="grad grad-just-closed"><span class="grad-name">${escapeHtml(gname)}</span> <span class="grad-mark closed">CLOSED THIS TURN</span></div>`
+  ).join('');
+
+  $('weaver').innerHTML = closedItems + gradItems;
+}
+
 function renderMeta(frame) {
   const rc = frame.role_calls || null;
   const cfg = meta.config || {};
@@ -526,12 +611,14 @@ function renderTurn(i) {
   if (i >= turns.length) i = turns.length - 1;
   idx = i;
   const f = turns[i];
+  const prev = i > 0 ? turns[i-1] : null;
   turnNum.textContent = f.turn ?? (i+1);
   slider.value = i;
   renderMap(f);
   renderBeings(f);
   renderEvents(f);
   renderPrivate(f);
+  renderWeaver(f, prev);
   renderMeta(f);
   $('prevBtn').disabled = (i===0);
   $('firstBtn').disabled = (i===0);
