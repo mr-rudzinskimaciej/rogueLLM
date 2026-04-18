@@ -63,6 +63,7 @@ from engine.runtime import (  # noqa: E402
     build_weaver_prompt, parse_weaver_output, apply_weaver_output,
     WEAVER_SYSTEM,
 )
+from engine.replay_capture import begin_capture, append_frame, save_capture  # noqa: E402
 
 
 CALLS: list[dict[str, Any]] = []
@@ -187,6 +188,9 @@ def main() -> int:
                         help="GM (Weaver + Breath + Settling) temperature")
     parser.add_argument("--delay", type=float, default=0.3)
     parser.add_argument("--llm-radius", type=int, default=20)
+    parser.add_argument("--capture", default="",
+                        help="write structured replay JSON to this path "
+                             "(readable by scripts/visualize_run.py)")
     args = parser.parse_args()
     DISABLE_THINKING[0] = args.no_thinking
 
@@ -368,6 +372,27 @@ One line per action. No commentary."""
     per_turn_totals: list[dict[str, float]] = []
     prior_call_count = 0
 
+    capture_enabled = bool(args.capture)
+    capture_obj: dict[str, Any] = {}
+    last_event_idx = 0
+    private_seen: dict[str, int] = {}
+    if capture_enabled:
+        capture_obj = begin_capture(
+            engine=engine,
+            world_file=str(world_path),
+            player_id=args.player,
+            config={
+                "npc_model": args.model,
+                "gm_model": gm_model,
+                "temp_npc": args.temp,
+                "temp_gm": args.temp_gm,
+                "weaver_enabled": args.enable_weaver,
+                "weaver_interval": args.weaver_interval,
+                "turns_requested": args.turns,
+            },
+        )
+        capture_obj.setdefault("meta", {})["role_calls"] = []
+
     for turn_index in range(args.turns):
         current_turn = engine.state.turn
         print(f"─── TURN {current_turn} ───")
@@ -424,6 +449,17 @@ One line per action. No commentary."""
               f"total={pt+ct}  cost=${cost:.6f}")
         print()
 
+        if capture_enabled:
+            last_event_idx, private_seen = append_frame(
+                capture=capture_obj, engine=engine,
+                audit=[f"role:{c['role']}:{c['total_tokens']}tok:${(c['cost_reported'] or c['cost_computed']):.4f}" for c in turn_calls],
+                last_event_idx=last_event_idx, private_seen=private_seen,
+            )
+            capture_obj["meta"]["role_calls"].append({
+                "turn": current_turn, "roles": role_counts,
+                "prompt": pt, "completion": ct, "cost": cost,
+            })
+
     print("=" * 68)
     print("SUMMARY")
     print("=" * 68)
@@ -457,6 +493,10 @@ One line per action. No commentary."""
         print("NOTE: prompt tokens grow with the event-log / private-log per")
         print("being, so real cost for long runs will exceed a linear projection.")
         print("Watch the 'in' column above — if it climbs each turn, scale it.")
+
+    if capture_enabled:
+        out = save_capture(capture_obj, args.capture, engine)
+        print(f"\n[capture] wrote {out}")
 
     return 0
 
