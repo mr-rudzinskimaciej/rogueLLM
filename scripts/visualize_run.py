@@ -119,9 +119,23 @@ def render(capture: dict[str, Any], title: str = "Keros Replay") -> str:
                 "kind": _escape(kind), "text": _escape(text),
             })
 
-        # Map overlay
-        grid_rows = _overlay_map(maps.get(map_id, {}), entities, map_id)
-        legend = (maps.get(map_id, {}) or {}).get("legend", {})
+        # Map overlays — render EVERY map, not just the engine's "current" one.
+        # The user wants to see places even when no being is standing in them.
+        all_maps: list[dict[str, Any]] = []
+        for mid, mdata in (maps or {}).items():
+            grid_rows = _overlay_map(mdata, entities, mid)
+            # Count living presences per map for the tab label
+            present = [e for e in entities.values()
+                       if e.get("location") == mid and e.get("id") != "__observer__"]
+            all_maps.append({
+                "id": mid,
+                "name": (mdata or {}).get("name", mid),
+                "desc": (mdata or {}).get("desc", ""),
+                "grid": grid_rows,
+                "legend": (mdata or {}).get("legend", {}),
+                "present_count": len(present),
+                "is_current": mid == map_id,
+            })
 
         # Role calls / cost for this turn (if present)
         rc = next((r for r in role_calls if r.get("turn") == frame.get("turn")), None)
@@ -129,10 +143,7 @@ def render(capture: dict[str, Any], title: str = "Keros Replay") -> str:
         per_turn.append({
             "turn": frame.get("turn"),
             "map_id": map_id,
-            "map_name": (maps.get(map_id, {}) or {}).get("name", map_id),
-            "map_desc": (maps.get(map_id, {}) or {}).get("desc", ""),
-            "grid": grid_rows,
-            "legend": legend,
+            "maps": all_maps,
             "entities": entities,
             "public": public_items,
             "private": private_by_being,
@@ -219,6 +230,10 @@ input[type=range]{accent-color:var(--accent);flex:0 0 180px}
 .panel .body{padding:10px 12px}
 
 .map-wrap{display:flex;flex-direction:column;gap:6px}
+.map-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px}
+.map-tab{font-size:10px;letter-spacing:.08em;padding:3px 9px;background:transparent;color:var(--fg2);border:1px solid var(--border)}
+.map-tab.active{color:var(--yellow);border-color:var(--yellow);box-shadow:0 0 6px rgba(255,215,74,.25)}
+.map-tab .mt-count{display:inline-block;background:var(--panel);border:1px solid var(--border);padding:0 4px;margin-left:4px;border-radius:2px;color:var(--fg)}
 .map-desc{color:var(--fg2);font-style:italic;font-size:12px;margin-bottom:6px}
 pre.map{margin:0;background:#02050300;color:var(--fg);
   font-size:15px;line-height:1.1;padding:8px;border:1px dashed var(--border);
@@ -243,6 +258,9 @@ pre.map .ent{color:var(--yellow);text-shadow:0 0 8px rgba(255,215,74,.7)}
 .being .bar.hunger span{background:var(--yellow)}
 .being .bar.thirst span{background:var(--cyan)}
 .being .tags{color:var(--dim);font-size:11px;margin-top:2px}
+.being.static{border-color:#403055;background:rgba(24,18,32,.55)}
+.being.static .name{color:#d3a2ff;text-shadow:0 0 5px rgba(211,162,255,.35)}
+.static-tag{color:#d3a2ff;font-style:italic}
 
 .events{display:flex;flex-direction:column;gap:2px;max-height:50vh;overflow:auto}
 .ev{padding:2px 6px;border-left:2px solid transparent}
@@ -309,6 +327,7 @@ pre.map .ent{color:var(--yellow);text-shadow:0 0 8px rgba(255,215,74,.7)}
     <div class="panel">
       <h2>Map <small id="mapName"></small></h2>
       <div class="body map-wrap">
+        <div class="map-tabs" id="mapTabs"></div>
         <div class="map-desc" id="mapDesc"></div>
         <pre class="map" id="mapGrid"></pre>
         <div class="legend" id="legend"></div>
@@ -352,13 +371,38 @@ function entityGlyphSet() {
 }
 const entGlyphs = entityGlyphSet();
 
+// Active map tab per turn; reset when turn changes (default = current map).
+let activeMapId = null;
+
 function renderMap(frame) {
-  const grid = frame.grid || [];
-  $('mapName').textContent = frame.map_name ? `— ${frame.map_name}` : '';
-  $('mapDesc').textContent = frame.map_desc || '';
+  const maps = frame.maps || [];
+  if (!maps.length) { $('mapGrid').textContent = ''; return; }
+
+  // Choose active tab: previously-chosen if still valid, else the frame's current map.
+  const idsHere = new Set(maps.map(m => m.id));
+  if (!activeMapId || !idsHere.has(activeMapId)) {
+    activeMapId = frame.map_id || maps[0].id;
+  }
+
+  // Render tabs
+  const tabsHtml = maps.map(m => {
+    const hereMark = m.is_current ? ' ◉' : '';
+    const presentMark = m.present_count ? ` <span class="mt-count">${m.present_count}</span>` : '';
+    const cls = 'map-tab' + (m.id === activeMapId ? ' active' : '');
+    return `<button class="${cls}" data-mid="${escapeHtml(m.id)}">${escapeHtml(m.name)}${hereMark}${presentMark}</button>`;
+  }).join('');
+  $('mapTabs').innerHTML = tabsHtml;
+  for (const btn of $('mapTabs').querySelectorAll('button')) {
+    btn.onclick = () => { activeMapId = btn.dataset.mid; renderMap(frame); };
+  }
+
+  const m = maps.find(mm => mm.id === activeMapId) || maps[0];
+  $('mapName').textContent = m.name ? `— ${m.name}` : '';
+  $('mapDesc').textContent = m.desc || '';
+
   // Overlay entity glyphs with highlight spans for visibility.
   let html = '';
-  for (const row of grid) {
+  for (const row of (m.grid || [])) {
     let line = '';
     for (const ch of row) {
       if (entGlyphs.has(ch)) line += `<span class="ent">${escapeHtml(ch)}</span>`;
@@ -368,16 +412,22 @@ function renderMap(frame) {
   }
   $('mapGrid').innerHTML = html.trimEnd();
 
-  const leg = frame.legend || {};
+  const leg = m.legend || {};
   const items = Object.entries(leg).map(([g, meta]) => {
     const name = meta && meta.name ? meta.name : g;
     const tags = (meta && meta.tags || []).join(' ');
     return `<div><span class="glyph">${escapeHtml(g)}</span> ${escapeHtml(name)}<span class="ltags">${escapeHtml(tags)}</span></div>`;
   }).join('');
-  // Append entity glyphs to legend for completeness.
+  // Entities on THIS map (portals, presences, beings) — skip observer
   const entList = Object.values(frame.entities||{})
-    .filter(e => e.location === frame.map_id)
-    .map(e => `<div><span class="glyph">${escapeHtml(e.glyph||'?')}</span> ${escapeHtml(e.name||e.id)}</div>`).join('');
+    .filter(e => e.location === m.id && e.id !== '__observer__')
+    .map(e => {
+      const tags = (e.tags||[]);
+      const role = tags.includes('portal') ? ' <span class="ltags">portal</span>'
+                 : tags.includes('static')  ? ' <span class="ltags">presence</span>'
+                 : '';
+      return `<div><span class="glyph">${escapeHtml(e.glyph||'?')}</span> ${escapeHtml(e.name||e.id)}${role}</div>`;
+    }).join('');
   $('legend').innerHTML = items + entList;
 }
 
@@ -388,24 +438,45 @@ function statBar(cls, cur, max) {
 
 function renderBeings(frame) {
   const ents = frame.entities || {};
-  const list = Object.values(ents).filter(e => (e.tags||[]).includes('alive') || (e.tags||[]).includes('mobile'));
-  $('beingsSub').textContent = `${list.length} present`;
+  // Show: anything alive/mobile OR anything with a personality block (like Mszota echo).
+  // Hide: the script's synthetic __observer__ entity, and pure portals/items.
+  const list = Object.values(ents).filter(e => {
+    if (e.id === '__observer__') return false;
+    const tags = e.tags || [];
+    if (tags.includes('alive') || tags.includes('mobile')) return true;
+    if (e.personality) return true;                  // static presences with inner voice
+    if (tags.includes('presence') || tags.includes('echo')) return true;
+    return false;
+  });
+  // Sort: living first, then presences; within group, by name.
+  list.sort((a, b) => {
+    const av = (a.tags||[]).includes('alive') ? 0 : 1;
+    const bv = (b.tags||[]).includes('alive') ? 0 : 1;
+    if (av !== bv) return av - bv;
+    return (a.name||a.id).localeCompare(b.name||b.id);
+  });
+  $('beingsSub').textContent = `${list.length} across maps`;
   $('beings').innerHTML = list.map(e => {
     const s = e.stats || {};
-    const hp = s.hp ?? '?', maxhp = s.max_hp ?? hp;
-    const hunger = s.hunger ?? 0, thirst = s.thirst ?? 0;
-    const tags = (e.tags || []).join(' ');
+    const tags = e.tags || [];
+    const isStatic = tags.includes('static') || tags.includes('echo') || !tags.includes('alive');
+    const hp = s.hp ?? '—', maxhp = s.max_hp ?? hp;
+    const hunger = s.hunger ?? null, thirst = s.thirst ?? null;
+    const tagsStr = tags.join(' ');
+    const statsRow = isStatic
+      ? `<div class="stats"><span class="stat static-tag">static presence</span> <span class="stat">${escapeHtml(e.location||'?')}</span></div>`
+      : `<div class="stats">
+           <span class="stat">HP: <b>${hp}/${maxhp}</b> ${statBar('hp', hp, maxhp)}</span>
+           ${hunger!==null?`<span class="stat">Hunger <b>${hunger}</b> ${statBar('hunger', hunger, 100)}</span>`:''}
+           ${thirst!==null?`<span class="stat">Thirst <b>${thirst}</b> ${statBar('thirst', thirst, 100)}</span>`:''}
+         </div>`;
     return `
-    <div class="being">
+    <div class="being${isStatic?' static':''}">
       <span class="glyph">${escapeHtml(e.glyph||'?')}</span>
       <span class="name">${escapeHtml(e.name||e.id)}</span>
       <span class="pos">[${(e.pos||[0,0]).join(', ')}] @ ${escapeHtml(e.location||'?')}</span>
-      <div class="stats">
-        <span class="stat">HP: <b>${hp}/${maxhp}</b> ${statBar('hp', hp, maxhp)}</span>
-        <span class="stat">Hunger <b>${hunger}</b> ${statBar('hunger', hunger, 100)}</span>
-        <span class="stat">Thirst <b>${thirst}</b> ${statBar('thirst', thirst, 100)}</span>
-      </div>
-      <div class="tags">${escapeHtml(tags)}</div>
+      ${statsRow}
+      <div class="tags">${escapeHtml(tagsStr)}</div>
     </div>`;
   }).join('') || '<div class="empty">no beings</div>';
 }
