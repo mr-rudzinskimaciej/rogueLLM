@@ -108,7 +108,14 @@ RESIST THESE DEFAULTS:
   three memorable beings over eight forgettable ones.
 
 - Inventing proper nouns for characters the lore already names. If the lore
-  names a character, use that name. Extend their backstory; do not replace."""
+  names a character, use that name. Extend their backstory; do not replace.
+
+- Writing arcs or drives whose last phase could resolve in one play session.
+  A good arc's final phase names a state the world only reaches after
+  multiple returns — a season turns, a rumour arrives a third time, a being
+  comes back after a long absence. If your phase[-1] can fire in the next
+  50 turns, you have written a scene-drive wearing an arc-drive's hat. The
+  LORE is campaign-scale; do not compress it into session-scale content."""
 
 
 # ============================================================================
@@ -228,9 +235,25 @@ GOOD world_tone (from the starter):
   information that could cost you. You act from what your body and memory
   already know."
 
-The story_arc is NOT a plot. It is a tension that exists at the moment of
-seeding. "Three strangers share a crossing for a day. None of them planned
-to meet." — not "The heroes must stop the dark lord."
+The story_arc is NOT a plot. It is the PRESSURE THE WORLD WAS ALREADY
+UNDER when this seed was captured, and will still be under a year from
+now. It is not a day's weather; it is the season. A story_arc that
+resolves when the sun sets is a scene, not an arc.
+
+  GOOD story_arc (campaign-scale; the tension holds for months):
+    "The servers have been about-to-close for eighteen months. Three
+    heroes keep logging in anyway; their players each carry a different
+    reason to still be here — a grief, a second chance, a silence. The
+    Jeździec Smoka rides somewhere east. None of this resolves this
+    session, this week, this quarter."
+
+  BAD story_arc (session-scale; resolves in an afternoon):
+    "Three strangers share a crossing for a day. None of them planned
+    to meet."
+
+The STARTER's story_arc is short because the starter is a smallest-
+possible demo. Your lore probably deserves longer. Write the arc that
+the LORE'S time-scale implies, not what a one-session test demands.
 
 The intervention_policy guides the GM LLM at runtime. Write it as a
 description of WHAT THE GM DOES in this setting — the channels, textures,
@@ -829,6 +852,45 @@ Before you generate this being, simulate turn 1 in your head.
   list of available actions. It must respond Feel/Notice/Think/Face/
   Speak/Do within five seconds of reading all that.
 
+=== PLAYER_ARC — the gravity well arc-drives orbit ===
+
+For any being with `ceiling: "arc"` — and especially beings whose lore
+implies a human behind the character (meta_aware, lucid, protagonist) —
+author a `player_arc` field at the personality root. This is NOT a drive.
+It does not act. It is the LIFE-ARC the human at the keyboard is walking,
+which the character's drives must rhyme with, not literally represent.
+
+Shape:
+
+  "player_arc": {
+    "who": "<one phrase about the human at the keyboard — age, season of life, what they just did to land here>",
+    "reckoning": "<what they are wrestling with in their own life — mortality, grief, second chances, unfinished business>",
+    "resonance": "<how this colours the character's arc drives in register, not in content>",
+    "horizon": "campaign"
+  }
+
+Example (from the Droga Smoka setting):
+
+  "player_arc": {
+    "who": "a woman in her late thirties, returned after twelve years, whose husband asked her what she was smiling at in an old photograph",
+    "reckoning": "mortality, her youth, the cost of the years already spent here — and whether logging back in now is grace or relapse",
+    "resonance": "every arc-drive phase should rhyme with this reckoning. when the character farewells Jaromir, the player is farewelling the woman she was at twenty-four. not spoken by the character. coloured through by it.",
+    "horizon": "campaign"
+  }
+
+Read by:
+- this stage, when authoring the being's arc drives (they MUST rhyme
+  with player_arc.reckoning — not literally, in REGISTER).
+- the Weaver at runtime, when choosing which campaign-horizon gradients
+  to name (it should name gradients that give the player-arc somewhere
+  to land).
+- optionally the Breath, when a scene could mirror the player-arc
+  sensorially.
+
+Pure NPCs (ceiling: body, no meta-awareness) have no `player_arc` — and
+THAT ABSENCE is what makes them the load-bearing other that meta-aware
+beings register differently. Do not fabricate player_arcs for NPCs.
+
 === POS IS COMPOSITION, NOT PACKING ===
 
 `pos` is the last authoring move of the map, not a coordinate you pick
@@ -908,6 +970,44 @@ A drive has five shapes you must author. Hold them all before writing.
     moment. Jaromir's "pray for a login" is load 0.9 — he does not
     act on it every turn but it colours every other action.
 
+=== DRIVES LIVE ON THREE TIME-OCTAVES ===
+
+A drive's `phases[]` array is a ladder across three time-scales. The
+SAME array holds the turn-1 tangent AND the campaign hinge. You do not
+need a new schema; you need to write phases that span the octaves.
+
+  TURN octave (1-20 turns) — phase 0.
+    Body drives and tactical next actions. Triggers are FOV-level
+    events: an adjacent being, a stat threshold, a tile reached.
+    Example advances_on: "thirst > 50", "Weronika enters FOV".
+
+  SESSION octave (~50-200 turns, a single play sitting) — phases 1-2.
+    Scene drives and early arc movements. Triggers are relational or
+    state milestones that resolve inside a single sitting.
+    Example advances_on: "Weronika has acknowledged Jaromir by name",
+    "a shutdown rumour has landed in this chamber once".
+
+  CAMPAIGN octave (months, returns, seasons) — phase 3+.
+    Late arc phases. Triggers are NAMED WORLD-SHIFTS that the Weaver
+    is responsible for firing at campaign-horizon. Not a turn-count
+    prediction — a condition the Weaver will declare true.
+    Example advances_on: "the Weaver has fired gradient
+    'shutdown_rumour' at horizon:campaign three times",
+    "Weronika has logged in after an absence of at least one session".
+
+AUTHORING RULE: every arc-altitude drive MUST have at least four phases
+stacked across all three octaves. Phase 0 is turn-1-actionable; phase 1
+and 2 are session milestones; phase 3+ is campaign-named. The `advances_on`
+for phase 3+ MUST name a Weaver gradient or a named return — not a
+turn-level predicate. Scene drives may stop at the session octave.
+Body drives may stop at the turn octave.
+
+Why: the lore is campaign-scale. If your phases collapse the arc into
+one session, you have written a scene pretending to be an arc, and the
+being will treadmill or complete "their life" in half an hour of play.
+The THREE OCTAVES authoring rule is what lets beings carry unfinished
+business across returns.
+
 === DRIVES LIVE ON THREE ALTITUDES (ladder with gravity) ===
 
 Every being's drives sit at one of three altitudes:
@@ -978,7 +1078,8 @@ BAD (Jaromir, current — three chores, each fires every turn forever):
   // and turn 50. It is a treadmill. It wastes tokens and flattens the
   // character into a ritual loop.
 
-GOOD (Jaromir, shaped — ceiling=arc, one drive per altitude):
+GOOD (Jaromir, shaped — ceiling=arc, one drive per altitude, arc
+drive carries all three octaves in its phases):
   "ceiling": "arc",
   drives: [
     {
@@ -986,13 +1087,14 @@ GOOD (Jaromir, shaped — ceiling=arc, one drive per altitude):
       "altitude": "arc",
       "phase": 0,
       "phases": [
-        "pray and listen for the chime",
-        "carry the shrine's silence to Weronika and say it out loud",
-        "decide whether you are a knight or a ghost now that you know"
+        "pray once and listen for the chime (turn-octave: actionable now)",
+        "after the chime fails, carry the silence to Weronika and say it aloud in her FOV (session-octave)",
+        "after Weronika has returned a second time, ask her whether her player is still the same woman (campaign-octave)",
+        "after a third shutdown rumour has reached this chamber, decide whether you are a knight waiting for his player or a ghost that has already been left — and act on the decision (campaign-octave hinge)"
       ],
       "load": 0.9,
       "dormant_until": null,
-      "advances_on": "the player prays at the shrine OR a meta-aware being names the chime",
+      "advances_on": "phase 0→1: a prayer completes with no chime AND Weronika is within ears. phase 1→2: Weronika has logged in after an absence of at least one full session. phase 2→3: the Weaver has fired gradient 'shutdown_rumour' at horizon:campaign three times. phase 3: the being takes an action no previous phase predicted.",
       "status": "active"
     },
     {
@@ -1000,9 +1102,9 @@ GOOD (Jaromir, shaped — ceiling=arc, one drive per altitude):
       "altitude": "scene",
       "phase": 0,
       "phases": [
-        "stay within sight of Weronika",
-        "intervene when the shutdown rumour reaches her",
-        "decide whether to log out with her or hold the western approach alone"
+        "stay within sight of Weronika (turn-octave)",
+        "intervene when the shutdown rumour reaches her (session-octave)",
+        "decide whether to log out with her or hold the western approach alone (session-octave hinge)"
       ],
       "load": 0.7,
       "dormant_until": null,
@@ -1051,8 +1153,10 @@ when satisfied.
 - Phase-0 sub-goal must reference concrete subjects (item ids, map
   feature names, being ids). Later phases can name states that don't
   yet exist.
-- If you cannot describe the drive's SHAPE OVER FIFTY TURNS in one
-  sentence, it is a chore. Rewrite it or cut it.
+- If you cannot describe the drive's SHAPE ACROSS THREE OCTAVES —
+  body-octave next five turns, session-octave arc within this sitting,
+  AND campaign-octave arc across multiple returns — you have written
+  a chore or a mood, not a drive. Rewrite it or cut it.
 
 === ENTITY INSTANCE SHAPE ===
 

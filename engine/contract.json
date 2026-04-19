@@ -263,9 +263,23 @@
     "fears":            "specific, lived fears. 'that you will still be here when winter comes' not 'the unknown'.",
     "comfort":          "what physically releases tension. Sensory.",
     "traits":           "array of 4-5 observable behaviors. What a neighbor would say.",
-    "drives":           "array of 2-4 current projects. MUST reference verbs that exist in this world's rules and items that exist in templates.",
+    "drives":           "array of 2-4 drive objects. Each: {text, altitude, phase, phases[], load, dormant_until, advances_on, status}. altitude ∈ {body, scene, arc}. phases[] is a three-octave ladder: phase 0 turn-scale, phases 1-2 session-scale, phase 3+ campaign-scale (advanced by Weaver gradients at horizon:campaign). Backward-compat: strings auto-promote to {altitude:'scene', status:'active', one-phase}. See engine/drives.py.",
+    "ceiling":          "'body' | 'scene' | 'arc' — caps how high this being's drives can reach. Heroes/protagonists → arc; post-holders (merchants, guards) → scene; beasts / flesh-dwellers → body. A ceiling=arc being MUST have at least one drive at every altitude. Inferred from tags if not declared.",
+    "player_arc":       "OPTIONAL — only for ceiling=arc beings whose lore implies a human behind the character. Shape: {who, reckoning, resonance, horizon:'campaign'}. NOT a drive. It does not act. It is the gravity well arc-drives orbit — arc-drive phases must RHYME with reckoning in register, not literally. Read by STAGE_6 when authoring arc drives, and by the Weaver when choosing which campaign-horizon gradients to name. Pure NPCs have no player_arc — that absence is load-bearing.",
     "speech":           "one sentence on rhythm, vocabulary, verbal habits.",
     "knowledge":        "3-4 specific local facts/rumors.",
     "plan":             "dawn-to-dusk routine. Specific to work and location."
+  },
+
+  "weaver_gradient_fields": {
+    "_doc": "A gradient is the Weaver's named pressure. Lives in state.flags.weaver_gradients. Each gradient names an ACTIONS-WILL-CLUSTER pattern the Settling can route into whisper/rumour and the beings' arc drives can advance off.",
+    "pressure":         "one-line description of the tension building. Read by the Settling as texture.",
+    "actors":           "list of entity ids the gradient is about.",
+    "horizon":          "'session' | 'return' | 'campaign'. session = resolves in this sitting (10-50 turns). return = resolves by next log-in cycle. campaign = resolves across months/seasons; arc-drive phase 3+ advances_on clauses reference campaign-horizon gradients BY NAME.",
+    "threshold":        "when the gradient is expected to break. Integer turn for session-horizon; string phrase for return/campaign ('next return', 'third shutdown rumour', 'after Weronika has returned twice more').",
+    "threshold_turn":   "legacy integer shorthand — implies horizon:session. Prefer explicit horizon+threshold on new gradients.",
+    "hint":             "minimal tilt the Settling should route if emergence fails on its own.",
+    "status":           "'building' | 'closed'.",
+    "created_turn":     "int — the turn the gradient was named."
   }
 }

@@ -103,8 +103,22 @@ wakes you at night. Second person: "that you will..." not "that he will..."
 traits: A short list of 4-5 behavioral descriptors. Observable patterns a neighbor \
 would say about you.
 
-drives: A list of 2-4 things you are actively trying to do. Not dreams — current \
-projects, ongoing needs, the daily math of survival and purpose.
+drives: A list of 2-4 drive OBJECTS (not plain strings). Each drive has the \
+shape: {text, altitude, phase, phases, load, dormant_until, advances_on, status}. \
+altitude is one of "body" | "scene" | "arc". A drive's `phases[]` ladder spans \
+three time-octaves: phase 0 is turn-scale (actionable next 5 turns), phases 1-2 \
+are session-scale (relational milestones that resolve this sitting), phase 3+ is \
+campaign-scale (state the world only reaches after a return, a season, or a \
+Weaver campaign-horizon gradient). At least one arc-altitude drive must carry \
+at least four phases stacked across all three octaves. Old string drives are \
+auto-promoted to {altitude:"scene", status:"active", one-phase}. \
+ALSO include on the personality root: \
+"ceiling": "body" | "scene" | "arc" — how high this being's drives reach. \
+Heroes/protagonists ceiling=arc; post-holders ceiling=scene; beasts/flesh-dwellers \
+ceiling=body. A ceiling=arc being MUST have at least one drive at every altitude \
+up to arc. For beings with ceiling=arc whose lore implies a human behind the \
+character, also include "player_arc": {who, reckoning, resonance, horizon:"campaign"} \
+— the gravity well arc-drives orbit, not a drive itself.
 
 speech: How you talk. Rhythm, vocabulary, verbal habits, what you avoid saying. One \
 sentence that would let someone write your dialogue. Use "you" not "he/she".

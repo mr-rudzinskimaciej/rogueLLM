@@ -491,12 +491,23 @@ place nobody has walked to yet but the lore keeps pointing at — and you \
 NAME them. The name is the intervention. You do not resolve gradients; you \
 chart them so that smaller forces can.
 
-You work in time before the moment. You look at what is building — not what \
-is happening — and you mark where pressure is accumulating. You hand those \
-marks forward as tide charts for the Settling to act through.
+You work across three time-horizons at once:
+  SESSION (~10-50 turns of this sitting) — ordinary scene pressures.
+  RETURN (the next log-in cycle) — what will be there when a being \
+comes back after an absence.
+  CAMPAIGN (months, seasons, the settling of everything the lore has \
+been about) — pressures no single session resolves.
+
+You hand SESSION gradients forward as tide charts for the Settling to act \
+through this sitting. You hand RETURN gradients forward to meet beings when \
+they re-enter the world. You hand CAMPAIGN gradients forward as the CLOCK \
+that advances arc-altitude drive phases — arc drives' late phases have \
+`advances_on` clauses that name campaign-horizon gradients BY NAME. If you \
+don't fire those gradients at that horizon, those phases never advance and \
+arcs never complete. Reach up.
 
 Your voice: geological. Hydrological. Patient. You think in decades; you \
-chart in turns.
+chart in turns AND in returns AND in seasons.
 
 A director asks: what should happen next? (plot, scene, beat)
 A weathermaker asks: where is the pressure building? Where will it break? \
@@ -538,8 +549,14 @@ Read [gm] vs [world] event sources. Organic events show where the world is \
 already alive. Do not re-chart gradients the Settling is already steering.
 
 OUTPUT FORMAT — one line per output, no commentary:
-  gradient <name> "<pressure>" actors:<id1>,<id2> threshold_turn:<N> \
+  gradient <name> "<pressure>" actors:<id1>,<id2> horizon:<session|return|campaign> \
+threshold:<turn N | "next return" | "<named world-shift">> \
 hint:"<minimal tilt for the Settling if emergence fails>"
+
+  Legacy shorthand `threshold_turn:<N>` still parses and implies horizon:session.
+  Prefer the explicit form. Campaign-horizon gradients MUST name a world-shift \
+(e.g. "third shutdown rumour", "Weronika returns"), not an integer turn.
+
   close_gradient <name>
   queue_create character "<sketch: who, why, when>" arrive_turn:<N>
   queue_create map "<sketch: place and purpose>"
@@ -663,19 +680,36 @@ def parse_weaver_output(raw: str) -> list[dict[str, Any]]:
         if not line or line == "pass":
             continue
         if line.startswith("gradient "):
-            # gradient <name> "<pressure>" actors:<ids> threshold_turn:<N> hint:"<text>"
+            # gradient <name> "<pressure>" actors:<ids>
+            #   horizon:<session|return|campaign>
+            #   threshold:<N | "next return" | "<named shift">>
+            #   threshold_turn:<N>  (legacy; implies horizon:session)
+            #   hint:"<text>"
             m = re.match(r'gradient\s+(\S+)\s+"([^"]+)"(.*)$', line)
             if m:
                 name, pressure, rest = m.group(1), m.group(2), m.group(3)
                 actors_m = re.search(r'actors:([\w,]+)', rest)
-                threshold_m = re.search(r'threshold_turn:(\d+)', rest)
+                horizon_m = re.search(r'horizon:(session|return|campaign)', rest)
+                threshold_turn_m = re.search(r'threshold_turn:(\d+)', rest)
+                threshold_quoted_m = re.search(r'threshold:"([^"]+)"', rest)
+                threshold_int_m = re.search(r'threshold:(\d+)(?!\w)', rest)
                 hint_m = re.search(r'hint:"([^"]+)"', rest)
+                horizon = horizon_m.group(1) if horizon_m else ("session" if threshold_turn_m else None)
+                threshold_value: Any = None
+                if threshold_quoted_m:
+                    threshold_value = threshold_quoted_m.group(1)
+                elif threshold_int_m:
+                    threshold_value = int(threshold_int_m.group(1))
+                elif threshold_turn_m:
+                    threshold_value = int(threshold_turn_m.group(1))
                 actions.append({
                     "verb": "gradient",
                     "name": name,
                     "pressure": pressure,
                     "actors": actors_m.group(1).split(",") if actors_m else [],
-                    "threshold_turn": int(threshold_m.group(1)) if threshold_m else None,
+                    "horizon": horizon or "session",
+                    "threshold": threshold_value,
+                    "threshold_turn": threshold_value if isinstance(threshold_value, int) else None,
                     "hint": hint_m.group(1) if hint_m else None,
                 })
         elif line.startswith("close_gradient "):
@@ -711,7 +745,9 @@ def apply_weaver_output(engine: GameEngine, actions: list[dict[str, Any]]) -> li
             gradients[name] = {
                 "pressure": action["pressure"],
                 "actors": action["actors"],
-                "threshold_turn": action["threshold_turn"],
+                "horizon": action.get("horizon", "session"),
+                "threshold": action.get("threshold"),
+                "threshold_turn": action.get("threshold_turn"),
                 "hint": action["hint"],
                 "status": "building",
                 "created_turn": engine.state.turn,
