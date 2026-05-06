@@ -339,6 +339,21 @@ class GameEngine:
         actor = context["actor"]
         self.state.current_map_id = actor.get("location", self.state.current_map_id)
         self.state.flags["location"] = self.state.current_map_id
+
+        # `say` as a top-level primitive (round 5, Repligate's vortex-aperture):
+        # Beings keep reaching for speech-as-action when only-speech-is-the-turn.
+        # Bypass rule-matching; emit public + private speech log; consume the turn.
+        verb = action.get("verb", "")
+        if verb == "say":
+            text = action.get("text") or " ".join(action.get("args", []))
+            text = (text or "").strip().strip('"').strip("'").strip()
+            if text:
+                self.log_event(f"{actor['name']} says: \"{text}\"", actor.get("pos"), actor.get("location"))
+                self.log_private(actor["id"], text, "say")
+            if increment_turn:
+                self.state.turn += 1
+            return True
+
         rule = self._match_rule(action, context)
         if not rule:
             # Suppress public log of engine-grammar misses (round 5 plumbing).
@@ -978,7 +993,7 @@ class GameEngine:
         parts.append("Think: (private reasoning — what you conclude, fear, calculate, or hope; what you're not saying aloud)")
         parts.append("Face: (what your body and expression do — what a careful watcher might see; you cannot fully control it)")
         parts.append("Speak: (what you say aloud, or nothing)")
-        parts.append("Do: [one action from the list above, copied exactly]")
+        parts.append("Do: [one action from the list above, copied exactly — OR `say \"<your line>\"` when speech IS the whole turn (when you have nothing to do but speak)]")
         parts.append("If your feeling toward someone changed: Relation: entity_id=new_stance 'one line why'")
         parts.append("")
         parts.append("Feel and Think are private — be honest there. If you are repeating yourself, something has changed that you haven't named yet. Find it.")
