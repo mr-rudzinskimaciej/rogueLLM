@@ -713,6 +713,13 @@ def create_character(
         entity_id = f"{entity_id}_{engine.state.turn}"
         data["id"] = entity_id
 
+    new_loc, new_pos = data.get("location"), tuple(data.get("pos") or [])
+    for other_id, other in engine.state.entities.items():
+        if other.get("location") == new_loc and tuple(other.get("pos") or []) == new_pos and new_pos:
+            engine.state._extra_audit.append(
+                f"pos_collide:{entity_id}+{other_id}@{new_loc}:{list(new_pos)}"
+            )
+            break
     engine.state.entities[entity_id] = data
     return data
 

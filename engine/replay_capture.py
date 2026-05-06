@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import llm_adapter
 from .engine import GameEngine
 
 
@@ -74,13 +75,19 @@ def append_frame(
             if msg:
                 private_lines.append(f"[GM] whisper -> {entity.get('name', eid)}: {msg}")
 
+    extras = list(getattr(engine.state, "_extra_audit", []) or [])
+    if extras:
+        engine.state._extra_audit.clear()
+    llm_calls = list(llm_adapter.call_log)
+    llm_adapter.call_log.clear()
     capture["frames"].append(
         {
             "turn": engine.state.turn,
             "state": snapshot_state(engine),
             "public": public_lines,
             "private": private_lines,
-            "audit": list(audit[-16:]),
+            "audit": list(audit[-64:]) + extras,
+            "llm_calls": llm_calls,
         }
     )
     return next_event_idx, private_seen

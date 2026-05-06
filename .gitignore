@@ -20,6 +20,8 @@ logs/
 # Delete or rescope entries below if a particular world should ship with the
 # repo. Everything under examples/starter/ is intentionally kept.
 examples/droga_smoka/
+examples/droga_smoka_v2/
+examples/droga_smoka_v3/
 reports/
 *.report.txt
 
@@ -28,3 +30,13 @@ replay_*.json
 replay_*.jsonl
 wet_run_*.txt
 scratch/
+
+# pre-commit safety backups (created before round-edits)
+*.preR5
+*.preR*.py
+
+# debug pipeline run outputs (analysis artefacts, not engine code)
+debug/runs/
+
+# world-specific staged proposals (e.g. hand-authored pressure-vectors for droga_smoka)
+debug/proposals/staging/round3/world_with_pressures.json

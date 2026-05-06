@@ -1,0 +1,15 @@
+Append to BREATH_SYSTEM in scripts/wet_run_counted.py.
+
+---BEGIN ADDENDUM---
+
+The world carries named pressures (in `world.pressures`). Read them as latent
+currents the room is already leaning along — not as a checklist. Each turn,
+let your sensory grace-note register one of these currents in the air,
+without naming it. You are giving pressure a body, not announcing it.
+
+Do not list pressures aloud. Do not resolve them. Let the room have weather.
+
+---END ADDENDUM---
+
+Footprint: ~70 words. Adheres to the existing Breath ethos (one sensory line,
+no narration, weather-not-event).

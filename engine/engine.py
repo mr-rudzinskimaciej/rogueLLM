@@ -63,6 +63,7 @@ class GameState:
     statuses: dict[str, dict[str, Any]]
     event_log: list[dict[str, Any]] = field(default_factory=list)
     flags: dict[str, Any] = field(default_factory=dict)
+    _extra_audit: list[str] = field(default_factory=list)  # engine-level audit drain
 
 
 class GameEngine:
@@ -308,10 +309,19 @@ class GameEngine:
         return True
 
     def _match_rule(self, action: dict[str, Any], context: dict[str, Any]) -> dict[str, Any] | None:
-        for rule in self.state.rules:
-            if rule["verb"] == action["verb"] and self._rule_matches(rule, context):
-                return rule
-        return None
+        matches = [r for r in self.state.rules
+                   if r["verb"] == action["verb"] and self._rule_matches(r, context)]
+        if not matches:
+            return None
+        if len(matches) > 1:
+            winner = matches[0].get("id", "?")
+            losers = ",".join(r.get("id", "?") for r in matches[1:])
+            actor_id = (context.get("actor") or {}).get("id", "?")
+            target_id = (context.get("target") or {}).get("id", "")
+            self.state._extra_audit.append(
+                f"rule_pick:{action['verb']}:{actor_id}->{target_id}:winner={winner}:losers={losers}"
+            )
+        return matches[0]
 
     def log_event(self, text: str, pos: list[int] | None, location: str | None = None, visible_to: str = "all", source: str = "world") -> None:
         """Log an event. visible_to: 'all' (everyone in FOV), 'self' (only actor), 'self+gm' (actor and GM).
@@ -331,7 +341,10 @@ class GameEngine:
         self.state.flags["location"] = self.state.current_map_id
         rule = self._match_rule(action, context)
         if not rule:
-            self.log_event(f"{actor['name']} cannot perform '{action['verb']}' in this context.", actor.get("pos"), actor.get("location"))
+            # Suppress public log of engine-grammar misses (round 5 plumbing).
+            # Route to actor's private feel + extra_audit for resolver consumption.
+            self.log_private(actor["id"], f"reached for '{action['verb']}' but the gesture didn't land", "feel")
+            self.state._extra_audit.append(f"verb_unknown:{actor['id']}:{action.get('verb','?')}:{action.get('target','')}")
             if increment_turn:
                 self.state.turn += 1
             return False
@@ -833,11 +846,11 @@ class GameEngine:
                     parts.append(f"  {whisper}")
                 parts.append("")
 
-        # --- Inner life and action history (all entries; compaction trims when needed) ---
+        # --- Inner life and action history — bounded window; compaction shrinks the rest ---
         private_log = actor.get("private_log", [])
         if private_log:
             parts.append("Your recent experience:")
-            for entry in private_log:
+            for entry in private_log[-40:]:
                 text = entry.get("text", "")
                 etype = entry.get("type", "think")
                 turn = entry.get("turn", "?")

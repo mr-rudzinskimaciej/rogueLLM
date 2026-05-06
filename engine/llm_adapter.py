@@ -17,9 +17,28 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from typing import Any
 
 DEFAULT_API_BASE = "https://openrouter.ai/api/v1"
+
+# Module-level call log. Drained per-frame by replay_capture into frame["llm_calls"].
+# Each entry: {model, ok, raw_len, elapsed_ms, error}
+call_log: list[dict[str, Any]] = []
+
+
+def _provider_extra_body(model: str) -> dict:
+    """OpenRouter provider routing.
+
+    Auto-pins to first-party DeepSeek when model is `deepseek/*` (4x cheaper
+    than third-party providers). Override via KEROS_PROVIDER ("" disables pin).
+    """
+    override = os.environ.get("KEROS_PROVIDER")
+    if override is not None:
+        return {"provider": {"only": [override]}} if override else {}
+    if model.startswith("deepseek/"):
+        return {"provider": {"only": ["deepseek"]}}
+    return {}
 
 
 def _free_models() -> list[str]:
@@ -79,17 +98,29 @@ def llm_chat_completion(
     current_model = resolve_model(model)
     for attempt in range(max_retries + 1):
         try:
-            response: Any = client.chat.completions.create(
-                model=current_model,
-                temperature=temperature,
-                messages=[
+            kwargs: dict[str, Any] = {
+                "model": current_model,
+                "temperature": temperature,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-            )
+            }
+            extra = _provider_extra_body(current_model)
+            if extra:
+                kwargs["extra_body"] = extra
+            t0 = time.monotonic()
+            response: Any = client.chat.completions.create(**kwargs)
             text = response.choices[0].message.content if response.choices else ""
+            call_log.append({"model": current_model, "ok": True,
+                             "raw_len": len(text or ""),
+                             "elapsed_ms": int((time.monotonic() - t0) * 1000),
+                             "error": None})
             return (text or "wait").strip()
         except Exception as exc:
+            call_log.append({"model": current_model, "ok": False, "raw_len": 0,
+                             "elapsed_ms": int((time.monotonic() - t0) * 1000) if 't0' in locals() else 0,
+                             "error": type(exc).__name__})
             print(f"[llm] {current_model} failed (attempt {attempt}): {type(exc).__name__}", file=sys.stderr, flush=True)
             if ":free" in model:
                 models = _free_models()

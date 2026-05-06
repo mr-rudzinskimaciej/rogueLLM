@@ -583,10 +583,8 @@ def build_weaver_prompt(engine: GameEngine, max_history: int = 30) -> str:
         "",
     ]
 
-    # Existing gradients from prior Weaver runs (round 5: filter closed — they
-    # were piling as tombstones, accounted for ~50k of the 100-turn token leak).
-    gradients = {n: g for n, g in state.flags.get("weaver_gradients", {}).items()
-                 if g.get("status") != "closed"}
+    # Existing gradients from prior Weaver runs
+    gradients = state.flags.get("weaver_gradients", {})
     if gradients:
         parts.append("=== YOUR EXISTING GRADIENTS ===")
         for name, g in gradients.items():
@@ -760,8 +758,7 @@ def apply_weaver_output(engine: GameEngine, actions: list[dict[str, Any]]) -> li
         elif verb == "close_gradient":
             name = action["name"]
             if name in gradients:
-                # Round 5: delete instead of mark-closed (tombstones piled).
-                del gradients[name]
+                gradients[name]["status"] = "closed"
                 gm_notes.pop(name, None)
             results.append(f"weaver:close+{name}")
         elif verb == "queue_create":
