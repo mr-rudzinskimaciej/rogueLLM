@@ -229,6 +229,11 @@ def main() -> int:
     parser.add_argument("--temp-gm", type=float, default=1.2,
                         help="GM (Weaver + Breath + Settling) temperature")
     parser.add_argument("--delay", type=float, default=0.3)
+    parser.add_argument("--inject-spawn", action="append", default=[],
+                        metavar="TURN:KIND:LOCATION:X,Y:SKETCH",
+                        help="Force a worldbuilder fire at a given turn. "
+                             "Format: 'turn:kind:location:x,y:sketch'. "
+                             "kind in {character,map}. Repeatable.")
     parser.add_argument("--llm-radius", type=int, default=20)
     parser.add_argument("--capture", default="",
                         help="write structured replay JSON to this path "
@@ -461,10 +466,49 @@ One line per action. No commentary."""
         )
         capture_obj.setdefault("meta", {})["role_calls"] = []
 
+    # Parse --inject-spawn directives once.
+    inject_specs: list[dict[str, Any]] = []
+    for spec in args.inject_spawn:
+        try:
+            turn_str, kind, location, xy, sketch = spec.split(":", 4)
+            x, y = (int(v) for v in xy.split(","))
+            inject_specs.append({
+                "turn": int(turn_str), "kind": kind.strip(),
+                "location": location.strip(), "pos": [x, y],
+                "sketch": sketch.strip(),
+            })
+        except Exception as exc:
+            print(f"[inject-spawn] bad spec {spec!r}: {exc}", file=sys.stderr)
+
     for turn_index in range(args.turns):
         current_turn = engine.state.turn
         print(f"─── TURN {current_turn} ───")
         prev_events = len(engine.state.event_log)
+
+        # --- INJECT SPAWN (Repligate's experiment: force a worldbuilder fire) ---
+        for spec in [s for s in inject_specs if s["turn"] == current_turn]:
+            CURRENT_ROLE[0] = "worldbuilder"
+            try:
+                if spec["kind"] == "character":
+                    from engine.worldbuilder import create_character
+                    res = create_character(
+                        engine, spec["sketch"], spec["location"], spec["pos"],
+                        adapter.llm_chat_completion, "deepseek/deepseek-v4-pro",
+                    )
+                    if isinstance(res, dict):
+                        print(f"  [inject] spawned character {res.get('id','?')} @ {spec['location']}{spec['pos']}")
+                    else:
+                        print(f"  [inject] character spawn FAILED: {res}")
+                elif spec["kind"] == "map":
+                    from engine.worldbuilder import create_map
+                    res = create_map(
+                        engine, spec["sketch"], spec["location"], spec["pos"],
+                        adapter.llm_chat_completion, "deepseek/deepseek-v4-pro",
+                    )
+                    print(f"  [inject] map result: {str(res)[:120]}")
+            except Exception as exc:
+                print(f"  [inject error: {type(exc).__name__}: {exc}]")
+
         # --- WEAVER fires FIRST (names long-horizon pressure gradients) ---
         if args.enable_weaver and args.enable_gm:
             try:

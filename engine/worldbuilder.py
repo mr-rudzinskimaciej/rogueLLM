@@ -266,10 +266,11 @@ def _describe_being_rich(ent: dict[str, Any], engine: GameEngine) -> str:
     if speech:
         lines.append(f"  Speech: {speech}")
 
-    # Drives
+    # Drives — may be plain strings (legacy) or dicts with 'text' (post-octave-tiering)
     drives = pers.get("drives") or pers.get("goals", [])
     if drives:
-        lines.append(f"  Drives: {', '.join(drives[:3])}")
+        drive_strs = [d if isinstance(d, str) else (d.get("text") or d.get("name") or str(d)) for d in drives[:3]]
+        lines.append(f"  Drives: {', '.join(drive_strs)}")
 
     # Inventory — show with item details from templates
     inv = ent.get("inventory", [])
