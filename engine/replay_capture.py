@@ -49,7 +49,14 @@ def append_frame(
     audit: list[str],
     last_event_idx: int,
     private_seen: dict[str, int],
+    save_path: str | Path | None = None,
 ) -> tuple[int, dict[str, int]]:
+    """Append a per-turn frame and (optionally) flush the whole capture to disk.
+
+    Pass save_path to make the capture resilient to mid-run kills: every frame
+    triggers a re-serialization of the full capture. For a 100-turn run the
+    capture stays under ~10MB; the per-turn write is microseconds.
+    """
     public_lines: list[str] = []
     private_lines: list[str] = []
 
@@ -90,6 +97,17 @@ def append_frame(
             "llm_calls": llm_calls,
         }
     )
+    if save_path is not None:
+        # Live flush: write the partial capture so a mid-run kill keeps
+        # everything up to the last completed turn. final_state is rewritten
+        # by save_capture() at run end with the canonical end-of-run snapshot.
+        out_path = Path(save_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = dict(capture)
+        payload["final_state"] = snapshot_state(engine)
+        payload.setdefault("meta", {})["partial"] = True
+        payload["meta"]["last_turn_landed"] = engine.state.turn
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return next_event_idx, private_seen
 
 

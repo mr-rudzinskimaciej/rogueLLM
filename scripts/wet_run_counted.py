@@ -604,6 +604,7 @@ One line per action. No commentary."""
                 capture=capture_obj, engine=engine,
                 audit=cost_audit + list(round_audit),
                 last_event_idx=last_event_idx, private_seen=private_seen,
+                save_path=args.capture,  # live flush every turn — mid-run kill keeps data
             )
             # append_frame records engine.state.turn, but run_round increments
             # it at the END of the round — so the frame we just pushed is labelled
