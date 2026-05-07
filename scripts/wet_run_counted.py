@@ -500,6 +500,7 @@ One line per action. No commentary."""
                 "weaver_interval": args.weaver_interval,
                 "turns_requested": args.turns,
             },
+            save_path=args.capture,  # truncates the JSONL sidecar at run start
         )
         capture_obj.setdefault("meta", {})["role_calls"] = []
 

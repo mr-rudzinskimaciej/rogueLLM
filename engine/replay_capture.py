@@ -30,7 +30,13 @@ def snapshot_state(engine: GameEngine) -> dict[str, Any]:
     }
 
 
-def begin_capture(engine: GameEngine, world_file: str, player_id: str, config: dict[str, Any]) -> dict[str, Any]:
+def begin_capture(engine: GameEngine, world_file: str, player_id: str, config: dict[str, Any], save_path: str | Path | None = None) -> dict[str, Any]:
+    # If a save_path is given, truncate the JSONL sidecar so a fresh run
+    # doesn't append to a previous run's stream.
+    if save_path is not None:
+        sidecar = _jsonl_sidecar_path(save_path)
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text("", encoding="utf-8")
     return {
         "meta": {
             "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -41,6 +47,12 @@ def begin_capture(engine: GameEngine, world_file: str, player_id: str, config: d
         "initial_state": snapshot_state(engine),
         "frames": [],
     }
+
+
+def _jsonl_sidecar_path(save_path: str | Path) -> Path:
+    """`reports/foo.json` -> `reports/foo.jsonl`. Lean live-tail stream."""
+    p = Path(save_path)
+    return p.with_suffix(".jsonl")
 
 
 def append_frame(
@@ -108,6 +120,18 @@ def append_frame(
         payload.setdefault("meta", {})["partial"] = True
         payload["meta"]["last_turn_landed"] = engine.state.turn
         out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        # Append a lean line to the JSONL sidecar (no state snapshot —
+        # state lives in the JSON; JSONL is for `tail -f` watching).
+        sidecar = _jsonl_sidecar_path(save_path)
+        lean = {
+            "turn": engine.state.turn,
+            "public": public_lines,
+            "private": private_lines,
+            "audit": list(audit[-64:]) + extras,
+            "llm_calls_count": len(llm_calls),
+        }
+        with sidecar.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(lean, ensure_ascii=False) + "\n")
     return next_event_idx, private_seen
 
 
