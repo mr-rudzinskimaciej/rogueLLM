@@ -1708,6 +1708,19 @@ def run_round(
     ):
         existing = getattr(engine.state, "_pending_weaver", None)
         if existing is None or existing.done():
+            # If existing JUST completed mid-round (after the start-of-round
+            # drain missed it), land it inline before overwriting — otherwise
+            # the result is silently dropped.
+            if existing is not None and existing.done():
+                try:
+                    raw_late = existing.result(timeout=0)
+                    late_actions = parse_weaver_output(raw_late)
+                    late_results = apply_weaver_output(engine, late_actions)
+                    for wr in late_results:
+                        audit.append(f"weaver_landed:{wr}")
+                    audit.append(f"weaver_landed_late:turn={engine.state.turn}")
+                except Exception as exc:
+                    audit.append(f"weaver_failed:{type(exc).__name__}:{exc}")
             weaver_prompt = build_weaver_prompt(engine, max_history=config.weaver_history)
             pool = getattr(engine.state, "_weaver_pool", None)
             if pool is None:

@@ -282,6 +282,8 @@ def main() -> int:
         llm_activation_radius=max(1, args.llm_radius),
         gm_enabled=args.enable_gm,
         gm_max_actions=3,
+        weaver_enabled=args.enable_weaver,
+        weaver_interval=max(1, args.weaver_interval),
     )
 
     # --- The two GM organs (per Repligate's diagnosis) -------------------
@@ -441,6 +443,17 @@ One line per action. No commentary."""
     def auto_player(_actor, _engine):
         return {"verb": "wait"}
 
+    def weaver_decider(prompt: str) -> str:
+        """Async-weaver entry point invoked from run_round on a background thread.
+        We keep CURRENT_ROLE='weaver' tagging via the wrapper but DON'T mutate
+        the shared list under threading — adapter.call_log is GIL-safe.
+        Note: CURRENT_ROLE may be wrong-tagged if read mid-flight by other roles;
+        acceptable for the round-5 speedup test, fix later with thread-local."""
+        # Set role at entry; concurrent NPC fan-out may overwrite, but the call
+        # itself goes through fine (model + provider routing + retry).
+        CURRENT_ROLE[0] = "weaver"
+        return adapter.llm_chat_completion(WEAVER_SYSTEM, prompt, model=gm_model, temperature=args.temp_gm)
+
     engine.state.turn = 1
     per_turn_totals: list[dict[str, float]] = []
     prior_call_count = 0
@@ -509,14 +522,12 @@ One line per action. No commentary."""
             except Exception as exc:
                 print(f"  [inject error: {type(exc).__name__}: {exc}]")
 
-        # --- WEAVER fires FIRST (names long-horizon pressure gradients) ---
-        if args.enable_weaver and args.enable_gm:
-            try:
-                run_weaver(engine)
-            except Exception as exc:
-                print(f"  [weaver error: {type(exc).__name__}: {exc}]")
+        # WEAVER is now async — run_round dispatches it on a background thread
+        # and lands its results at the start of the next round (no critical-path
+        # cost). The standalone synchronous run_weaver(engine) call was bypassing
+        # the async path; removed.
 
-        # --- BREATH organ second, so beings inhale the air it sets ---
+        # --- BREATH organ — runs before beings act so they inhale the air it sets ---
         if args.enable_gm:
             try:
                 run_breath(engine)
@@ -530,6 +541,7 @@ One line per action. No commentary."""
                 player_action_provider=auto_player,
                 npc_decider=npc_decider,
                 gm_decider=settling_decider if args.enable_gm else None,
+                weaver_decider=weaver_decider if (args.enable_weaver and args.enable_gm) else None,
                 config=config,
             ) or []
         except Exception as exc:
