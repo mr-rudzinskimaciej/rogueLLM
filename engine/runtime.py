@@ -1616,17 +1616,71 @@ def run_round(
             for aid in candidates_for_compaction:
                 audit.append(f"npc_compact_skipped:{aid}:no_llm")
 
-    # --- GM turn ---
+    # --- GM turn (parallelized: main pass + resolver pass fan out concurrently) ---
+    # Both reads of state happen up-front while the world is frozen; the two
+    # LLM calls are independent (resolver only reads failed_actions, main GM
+    # reads scene state). Apply each result's actions sequentially after
+    # results return — preserves intra-turn ordering of GM-emitted effects.
+    raw_gm: str | None = None
+    raw_resolve: str | None = None
     if config.gm_enabled and gm_decider:
         gm_prompt = build_gm_prompt(engine, max_events=config.gm_event_log_limit)
-        raw_gm = gm_decider(gm_prompt)
-        gm_actions = parse_gm_actions(raw_gm, max_actions=config.gm_max_actions)
-        for gm_action in gm_actions:
-            result = apply_gm_action(engine, gm_action, config)
-            audit_item = f"gm:{result}"
-            audit.append(audit_item)
-            if step_callback:
-                step_callback({"kind": "gm", "action": gm_action, "audit": audit_item})
+        # Note: resolver_prompt only built if there are failed_actions; we
+        # build it BEFORE main GM acts so the prompts capture frozen state.
+        if failed_actions:
+            # Expand unknown items first (synchronous; affects resolver_prompt content).
+            llm = _worldbuilder_llm(config)
+            if llm:
+                unknown_refs: list[str] = []
+                for failure in failed_actions:
+                    action = failure["action"]
+                    for ref in action.get("args", []):
+                        if ref and ref not in engine.state.entities and ref not in engine.state.item_templates:
+                            unknown_refs.append(ref)
+                if unknown_refs:
+                    unknown_refs = list(dict.fromkeys(unknown_refs))
+                    actor_sketch = "; ".join(
+                        f"{f['actor'].get('name', '?')} at {f['actor'].get('location', '?')}"
+                        for f in failed_actions[:3]
+                    )
+                    actor_loc = failed_actions[0]["actor"].get("location", "")
+                    expand_result = expand_unknown_items(
+                        engine, unknown_refs, actor_sketch,
+                        llm, config.worldbuilder_model, actor_loc,
+                    )
+                    if expand_result.get("items_created"):
+                        audit.append(f"item_expand:{','.join(expand_result['items_created'])}")
+                    if expand_result.get("rules_created"):
+                        audit.append(f"rule_expand:{','.join(expand_result['rules_created'])}")
+            resolver_prompt = build_gm_resolver_prompt(engine, failed_actions)
+        else:
+            resolver_prompt = None
+
+        # Fan out the two GM calls concurrently.
+        if resolver_prompt is not None:
+            with ThreadPoolExecutor(max_workers=2, thread_name_prefix="gm") as gm_pool:
+                fut_main = gm_pool.submit(gm_decider, gm_prompt)
+                fut_resolve = gm_pool.submit(gm_decider, resolver_prompt)
+                try:
+                    raw_gm = fut_main.result()
+                except Exception as exc:
+                    audit.append(f"gm_main_failed:{type(exc).__name__}")
+                try:
+                    raw_resolve = fut_resolve.result()
+                except Exception as exc:
+                    audit.append(f"gm_resolve_failed:{type(exc).__name__}")
+        else:
+            raw_gm = gm_decider(gm_prompt)
+
+        # Apply main GM actions first.
+        if raw_gm:
+            gm_actions = parse_gm_actions(raw_gm, max_actions=config.gm_max_actions)
+            for gm_action in gm_actions:
+                result = apply_gm_action(engine, gm_action, config)
+                audit_item = f"gm:{result}"
+                audit.append(audit_item)
+                if step_callback:
+                    step_callback({"kind": "gm", "action": gm_action, "audit": audit_item})
 
     # --- Persist failure log (last 10 turns, for resolver context) ---
     if failed_actions:
@@ -1659,37 +1713,8 @@ def run_round(
         cutoff = engine.state.turn - 10
         engine.state.flags["failure_log"] = [f for f in failure_log if f.get("turn", 0) > cutoff]
 
-    # --- GM resolver: handle failed actions ---
-    if failed_actions and gm_decider:
-        # Before resolving, expand any unknown items referenced in failures
-        llm = _worldbuilder_llm(config)
-        if llm:
-            unknown_refs: list[str] = []
-            for failure in failed_actions:
-                action = failure["action"]
-                for ref in action.get("args", []):
-                    if ref and ref not in engine.state.entities and ref not in engine.state.item_templates:
-                        unknown_refs.append(ref)
-            if unknown_refs:
-                # Deduplicate
-                unknown_refs = list(dict.fromkeys(unknown_refs))
-                # Build context from the actors who tried to use these items
-                actor_sketch = "; ".join(
-                    f"{f['actor'].get('name', '?')} at {f['actor'].get('location', '?')}"
-                    for f in failed_actions[:3]
-                )
-                actor_loc = failed_actions[0]["actor"].get("location", "")
-                expand_result = expand_unknown_items(
-                    engine, unknown_refs, actor_sketch,
-                    llm, config.worldbuilder_model, actor_loc,
-                )
-                if expand_result.get("items_created"):
-                    audit.append(f"item_expand:{','.join(expand_result['items_created'])}")
-                if expand_result.get("rules_created"):
-                    audit.append(f"rule_expand:{','.join(expand_result['rules_created'])}")
-
-        resolver_prompt = build_gm_resolver_prompt(engine, failed_actions)
-        raw_resolve = gm_decider(resolver_prompt)
+    # --- GM resolver: apply pre-computed resolver actions (parallel with main GM above) ---
+    if failed_actions and gm_decider and raw_resolve:
         resolve_actions = parse_gm_actions(raw_resolve, max_actions=len(failed_actions) + 2)
         for ra in resolve_actions:
             result = apply_gm_action(engine, ra, config)
