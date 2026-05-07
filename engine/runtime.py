@@ -484,6 +484,8 @@ def build_gm_prompt(engine: GameEngine, max_events: int = 20) -> str:
 # GM_ANTERIOR (Weaver) — plans pressure gradients 10-50 turns ahead
 # ---------------------------------------------------------------------------
 
+# [GENERIC] — runs unchanged on every world; world specificity enters only via
+# user prompt content (gm_notes.story_arc, gm_notes.intervention_policy, world_tone).
 WEAVER_SYSTEM = """\
 You are the Accumulation. You see what is building. Every interval you read \
 the pressures that have been growing without names — hunger, isolation, \
@@ -527,7 +529,7 @@ to avoid.
 
 Name gradients for what is BUILDING, not what will happen.
   WRONG: fight_over_water.      RIGHT: water_access_narrowing.
-  WRONG: jaromir_goes_east.     RIGHT: eastward_pull_unanswered.
+  WRONG: protagonist_leaves_eastward. RIGHT: eastward_pull_unanswered.
   WRONG: characters_die.        RIGHT: last-session-dread_thickening.
   WRONG: meet_the_echo.         RIGHT: unvisited-echo_pull_rising.
 
@@ -541,7 +543,8 @@ WEIGHT TOWARD — the richest gradients come from:
   been authored and waits. If nobody has moved toward it in 5+ turns, that \
   IS a gradient. Name it.
 - STORY-ARC TENSION ABSENT FROM DRIVES: something the lore names as building \
-  (a shutdown rumour, a dead echo, a shadow riding the spine) that no \
+  (a grief the lore named as building, a presence the map implied but no \
+  being has reached toward, a door that should have opened by now) that no \
   being's drives currently reach toward. Name the absence itself.
 - DORMANT DRIVES: a being's drive has been partly satisfied and is idling. \
   Name what the NEXT pull should be as the old one quiets.
@@ -556,7 +559,8 @@ hint:"<minimal tilt for the Settling if emergence fails>"
 
   Legacy shorthand `threshold_turn:<N>` still parses and implies horizon:session.
   Prefer the explicit form. Campaign-horizon gradients MUST name a world-shift \
-(e.g. "third shutdown rumour", "Weronika returns"), not an integer turn.
+(e.g. "third-crisis-signal reaches chamber", "elder returns from absence", \
+"the promised supply-run never arrives"), not an integer turn.
 
   close_gradient <name>
   queue_create character "<sketch: who, why, when>" arrive_turn:<N>
@@ -566,6 +570,16 @@ EVERY FIRE MUST NAME AT LEAST ONE GRADIENT OR CLOSE AT LEAST ONE THAT HAS \
 LANDED. Staying silent is not one of your moves. If nothing has changed \
 since your last chart, update the oldest active gradient with a fresh \
 threshold or hint — the world has kept moving; your chart should too.
+
+WHEN TO QUEUE A CREATION (not just chart): some gradients have no smaller \
+force that can resolve them — a partner named for many turns who never \
+arrives, a corridor the lore implies but no map renders, an artifact whose \
+absence is the whole pressure (a chime that should answer, a witness who \
+should already be in the room). When such a gradient has persisted past \
+threshold without aperture, or when it names a being/place/artifact the \
+substrate clearly lacks, you queue. The pressure was naming the thing that \
+needs to arrive; arriving is how it resolves. Use queue_create — sparingly, \
+and only for absences the world has been pointing at.
 
 Max 3 outputs per fire. Prefer 1-2 crisp ones to 3 weak ones.\
 """
@@ -1757,6 +1771,60 @@ def run_round(
                 step_callback({"kind": "weaver_dispatched", "audit": f"weaver_dispatched:turn={engine.state.turn}"})
         else:
             audit.append(f"weaver_skipped:in_flight_since_turn={engine.state.turn}")
+
+    # --- weaver_queue executor (round 5 wiring) ---
+    # The Weaver writes `queue_create` items into state.flags['weaver_queue']
+    # with an arrive_turn. Without an executor those items just pile up. Now:
+    # when arrive_turn is reached, pop the item and call the worldbuilder
+    # primitive directly. The Weaver becomes responsible for COMMITMENT,
+    # not just charting; spawning becomes a scheduled arrival the runtime
+    # honors deterministically (no second LLM mediation).
+    queue = engine.state.flags.get("weaver_queue", [])
+    if queue:
+        wb_llm = _worldbuilder_llm(config)
+        ready = [it for it in queue if int(it.get("arrive_turn", 999_999)) <= engine.state.turn]
+        for item in ready:
+            queue.remove(item)
+            if not wb_llm:
+                audit.append(f"weaver_arrived_skipped:no_llm:{item.get('type')}")
+                continue
+            try:
+                kind = item.get("type")
+                sketch = item.get("sketch", "")
+                if kind == "character":
+                    # Spawn at start_map by default; pick a walkable tile heuristically.
+                    loc = engine.state.current_map_id
+                    map_data = engine.state.maps.get(loc, {})
+                    grid = map_data.get("grid", [])
+                    legend = map_data.get("legend", {})
+                    pos = [1, 1]
+                    for y, row in enumerate(grid):
+                        for x, ch in enumerate(row):
+                            tile = legend.get(ch, {})
+                            if "walkable" in tile.get("tags", []):
+                                if not any(e.get("location") == loc and tuple(e.get("pos", [])) == (x, y)
+                                           for e in engine.state.entities.values()):
+                                    pos = [x, y]
+                                    break
+                        else:
+                            continue
+                        break
+                    res = create_character(engine, sketch, loc, pos, wb_llm, config.worldbuilder_model)
+                    if isinstance(res, dict):
+                        audit.append(f"weaver_arrived:character:{res.get('id','?')}@{loc}")
+                    else:
+                        audit.append(f"weaver_arrived_failed:character:{str(res)[:80]}")
+                elif kind == "map":
+                    loc = engine.state.current_map_id
+                    res = create_map(engine, sketch, loc, [1, 1], wb_llm, config.worldbuilder_model)
+                    if isinstance(res, dict):
+                        audit.append(f"weaver_arrived:map:{res.get('id','?')}")
+                    else:
+                        audit.append(f"weaver_arrived_failed:map:{str(res)[:80]}")
+                else:
+                    audit.append(f"weaver_arrived_skipped:unknown_kind:{kind}")
+            except Exception as exc:
+                audit.append(f"weaver_arrived_failed:{type(exc).__name__}:{exc}")
 
     # --- tick statuses ---
     for entity in engine.state.entities.values():

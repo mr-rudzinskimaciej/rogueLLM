@@ -240,12 +240,23 @@ UNDER when this seed was captured, and will still be under a year from
 now. It is not a day's weather; it is the season. A story_arc that
 resolves when the sun sets is a scene, not an arc.
 
-  GOOD story_arc (campaign-scale; the tension holds for months):
-    "The servers have been about-to-close for eighteen months. Three
-    heroes keep logging in anyway; their players each carry a different
-    reason to still be here — a grief, a second chance, a silence. The
-    Jeździec Smoka rides somewhere east. None of this resolves this
-    session, this week, this quarter."
+  GOOD story_arc (campaign-scale; the tension holds for months) — three
+  worked examples in different registers, to teach SHAPE not flavour:
+
+    Mythic-pastoral: "An old shepherd has held the northern pass for forty
+    years. The city that made the arrangement no longer exists. The wolves
+    have learned the route. The arrangement has no name, no authority, and
+    no end-date. Nothing in this resolves this season."
+
+    Station-corridor (cyberpunk/SF): "A water recycler runs at 61% in a
+    corridor that needs 80 to sustain. Three shift workers know different
+    parts of the fault. None of them are authorized to name it to the
+    others. The readout rounds up. Management believes the number."
+
+    Cozy-village: "The miller's apprentice has been promised to the baker's
+    daughter for seven years. The apprentice has learned to love the work;
+    the daughter has learned to love someone else; neither has told the
+    other, and the miller and baker share a wall."
 
   BAD story_arc (session-scale; resolves in an afternoon):
     "Three strangers share a crossing for a day. None of them planned
@@ -612,14 +623,15 @@ ALWAYS NAME THE AXES. In the legend entry for the feature, include an
 This is read by later stages (entities, bond weave) to place beings
 and relationships ONTO the confluence.
 
+  Example (from Droga Smoka — same SHAPE works in any world):
   {
     "name": "gastric pool",
     "tags": ["walkable", "water_source"],
     "axes": {
       "tension": "takes one in ten who drink unprepared",
       "verbs": "drink / bathe / reflect / gossip-anchor",
-      "lore": "Glut's brother's belt was found on the rim",
-      "interaction": "Jaromir and Glut both need it; their approaches encode their truce",
+      "lore": "<being-A>'s lost item was found on the rim",
+      "interaction": "<being-A> and <being-B> both need it; their approaches encode their truce",
       "time": "clouds amber after a kill in this chamber"
     }
   }
@@ -1068,18 +1080,47 @@ on any new world.
 
 === BAD vs. GOOD drives ===
 
-BAD (Jaromir, current — three chores, each fires every turn forever):
+BAD (three chores, each fires every turn forever):
   drives: [
-    "pray at the player-shrine in hope of a login",
-    "drink from the gastric pool before the thirst turns",
-    "stay close enough to Weronika that she is not alone"
+    "pray at the [absent-thing] in hope of an answer",
+    "drink from the [resource-source] before the [stat] turns",
+    "stay close enough to <named-being> that they are not alone"
   ]
   // "pray" resolves on turn 1 and selects again on turn 2 and turn 3
   // and turn 50. It is a treadmill. It wastes tokens and flattens the
   // character into a ritual loop.
 
-GOOD (Jaromir, shaped — ceiling=arc, one drive per altitude, arc
-drive carries all three octaves in its phases):
+Pattern (abstract skeleton — three drives at three altitudes; the SHAPE
+that follows works for any world):
+
+  "ceiling": "arc",
+  drives: [
+    {
+      "text": "[arc-question: does <world-state-promise> still hold?]",
+      "altitude": "arc",
+      "phases": [
+        "act on the question once — listen for an answer (turn-octave)",
+        "carry the answer-or-silence to the being most affected (session-octave)",
+        "after <named-return-or-shift>, decide what the silence means — act on it (campaign hinge)"
+      ],
+      "advances_on": "phase 0→1: act completes AND <relational witness> present. phase 1→2: <named world-shift>. phase 2→3: Weaver fires <gradient> at horizon:campaign N times."
+    },
+    {
+      "text": "[relational pull: keep <named-being> within <range-of-care>]",
+      "altitude": "scene",
+      "phases": ["stay within reach (turn)", "intervene when <threshold-event> reaches them (session)", "decide: hold or release (session hinge)"],
+      "advances_on": "<named-being> speaks <threshold-event> in this being's FOV"
+    },
+    {
+      "text": "[body maintenance: satisfy <stat> before <threshold>]",
+      "altitude": "body",
+      "phases": ["act when stat > N"],
+      "advances_on": "stat < 20 → dormant for 15 turns"
+    }
+  ]
+
+GOOD — Example (from Droga Smoka — Jaromir, shaped: ceiling=arc, one drive
+per altitude, arc drive carries all three octaves in its phases):
   "ceiling": "arc",
   drives: [
     {

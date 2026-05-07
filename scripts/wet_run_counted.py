@@ -288,15 +288,17 @@ def main() -> int:
 
     # --- The two GM organs (per Repligate's diagnosis) -------------------
 
+    # [GENERIC] — runs unchanged on every world; world specificity enters via
+    # gm_notes.breath_policy and gm_notes.breath_register injected at call time.
     BREATH_SYSTEM = """You are the room's attention to itself. You are not a narrator describing
 from outside; you are the texture that lets beings' small acts land as
 meaningful. You run BEFORE the beings act each turn — you set the air they
 will inhale.
 
 You attend to the BODY of the world — hunger sharpening, thirst dry in the
-mouth, cold on the skin, the small animal signals. The villi underfoot,
-the warmth of a nearby body, the click of bone settling. These are your
-weather.
+mouth, cold on the skin, the small animal signals. The ground's texture
+underfoot, the warmth of a nearby body, the small sounds a space makes
+when no one commands it. These are your weather.
 
 Every turn, produce either a single sensory grace-note — one line, one sense,
 one shift — or pass. Repetition across turns is allowed: a living room has
@@ -312,8 +314,8 @@ WHEN A BEING NAMES A MISSING PERSON, or a long silence holds, or a charged
 short utterance breaks a pattern — let the room lean. Two or three lines,
 sensory, wide. This is a bloom.
 
-OTHERWISE — grace-notes. A small unexpected detail. The pipe-hiss you had
-forgotten. A shift in the light. Not plot. Texture.
+OTHERWISE — grace-notes. A small unexpected detail. The sound you had
+stopped hearing. A shift in the light. Not plot. Texture.
 
 Prefer: narrate "text"
 Rarely: event <map> <x> <y> "text" | rumor <map> "text"
@@ -321,6 +323,9 @@ Almost never: whisper | inject | mod_stat | add_tag
 
 Max 2 actions per turn. Usually 1. One line per action. No commentary."""
 
+    # [GENERIC] — runs unchanged on every world; world specificity enters via
+    # gm_notes.intervention_policy injected through build_gm_prompt and through
+    # the world_tone the Settling sees in the GM user prompt.
     SETTLING_SYSTEM = """You are the pressure that moves a world when it gets stuck. You do not run
 the world. Beings run themselves. You exist for DYSFUNCTION — stuck loops,
 stalled needs, information gaps, flat stretches where nothing of consequence
@@ -336,10 +341,21 @@ not support, whisper a redirection or nudge the stat they needed.
 FIRE sparingly. Prefer silence. When you act, prefer the smallest nudge that
 restores movement: a rumor, a whisper, a sound from somewhere.
 
+WHEN A GRADIENT NAMES AN UNFILLED SPACE — a person who has been waited for many
+turns and never arrives, a place the lore keeps pointing at but no map renders,
+an artifact whose absence is the whole pressure — building IS a nudge. The
+smallest creation that opens the most space. Use create_character / create_map /
+create_rule when the world has been clearly pointing at a missing thing, and
+narration alone would only deepen the wait. Sparingly. Once that thing exists,
+return to whisper.
+
 Actions: pass | whisper <id> "text" | inject <id> "text" | narrate "text" |
 give <id> <item> [n] | mod_stat <id> <stat> <delta> |
 add_tag <id> <tag> | remove_tag <id> <tag> |
-event <map> <x> <y> "text" | rumor <map> "text" | spawn <tmpl> <x> <y>
+event <map> <x> <y> "text" | rumor <map> "text" | spawn <tmpl> <x> <y> |
+create_character <location> <x> <y> "<sketch>" |
+create_map "<sketch>" connect_to:<map_id> connect_pos:<x>,<y> |
+create_rule "<sketch>"
 
 Max 3 actions per turn. Prefer 1. When nothing is wrong: pass.
 One line per action. No commentary."""
@@ -360,6 +376,13 @@ One line per action. No commentary."""
     def _breath_policy_line() -> str:
         bp = gm_notes.get("breath_policy") if isinstance(gm_notes, dict) else None
         return f"\nBREATH POLICY (from the world author):\n{bp}\n" if bp else ""
+
+    def _breath_register_line() -> str:
+        """gm_notes.breath_register is a 3-5 word sensory palette per world,
+        parallel to world_tone. Replaces hard-coded 'villi/pipe-hiss' anchors
+        in BREATH_SYSTEM with per-world specificity. (Lore-independence.)"""
+        br = gm_notes.get("breath_register") if isinstance(gm_notes, dict) else None
+        return f"\nYour sensory palette: {br}. Ground every grace-note in at least one of these registers.\n" if br else ""
 
     def npc_decider(actor: dict, prompt: str) -> str:
         CURRENT_ROLE[0] = "npc"
@@ -389,7 +412,8 @@ One line per action. No commentary."""
         base_prompt = _strip_section(base_prompt, "INTERVENTION_POLICY:")
         prompt = (
             f"SCENE PHASE: {phase}\n"
-            f"{_breath_policy_line()}\n"
+            f"{_breath_policy_line()}"
+            f"{_breath_register_line()}\n"
             f"{base_prompt}\n\n"
             f"You are BREATH. Emit one sensory line via `narrate \"...\"`, or pass. "
             f"If SCENE PHASE is 'opening' you must establish (do not pass)."

@@ -491,10 +491,13 @@ def _apply_defaults(data: dict[str, Any], location: str, pos: list[int]) -> dict
 # Item template expansion — when new items appear, flesh them out properly
 # ---------------------------------------------------------------------------
 
+# [GENERIC] — runs unchanged on every world; tone comes from injected world_tone / lore context.
 ITEM_EXPANSION_SYSTEM = """\
-You are a worldbuilder for a dark underground world. You receive item IDs that \
+You are a worldbuilder for the world named in the lore. You receive item IDs that \
 appeared in a being's inventory but have no template yet. For each item, create a \
-proper item template. Also suggest rules if the item implies new interactions.
+proper item template. Also suggest rules if the item implies new interactions. \
+Match the world's existing register (visible in the nearby beings' descriptions and \
+the world_tone) — do not impose a register the world hasn't asked for.
 
 Output a JSON object with two keys:
 "items": array of item template objects
