@@ -921,6 +921,55 @@ def create_map(
         portal.setdefault("bonds", {})
         engine.state.entities[portal["id"]] = portal
 
+        # Auto-mirror: the LLM's portals say "I'm in the new map and I take you
+        # back to OLD_MAP." Without an entry-portal in OLD_MAP no soul can ever
+        # reach this new map. If the caller didn't pass connect_to, mint the
+        # reverse-portal automatically so the new map becomes reachable.
+        dest_id = portal.get("stats", {}).get("portal_map")
+        if dest_id and dest_id != map_id and dest_id in engine.state.maps:
+            already_mirrored = any(
+                e.get("location") == dest_id
+                and e.get("stats", {}).get("portal_map") == map_id
+                for e in engine.state.entities.values()
+            )
+            if not already_mirrored:
+                # Find a walkable spot in the destination map for the entry portal.
+                dest_grid = engine.state.maps[dest_id].get("grid", [])
+                dest_legend = engine.state.maps[dest_id].get("legend", {})
+                entry_pos = None
+                for y, row in enumerate(dest_grid):
+                    for x, ch in enumerate(row):
+                        tile_tags = set(dest_legend.get(ch, {}).get("tags", []))
+                        if "walkable" in tile_tags:
+                            occupied = any(
+                                e.get("location") == dest_id and tuple(e.get("pos", [])) == (x, y)
+                                for e in engine.state.entities.values()
+                            )
+                            if not occupied:
+                                entry_pos = [x, y]
+                                break
+                    if entry_pos is not None:
+                        break
+                if entry_pos is not None:
+                    entry_portal = {
+                        "id": f"portal_{dest_id}_to_{map_id}",
+                        "name": f"Passage to {data.get('name', map_id)}",
+                        "glyph": "+",
+                        "tags": ["door", "portal", "closed", "solid"],
+                        "stats": {
+                            "portal_map": map_id,
+                            "portal_pos": list(portal.get("pos", [1, 1])),
+                            "open_message": f"The passage to {data.get('name', map_id)} opens.",
+                            "portal_message": f"You step through into {data.get('name', map_id)}.",
+                        },
+                        "pos": entry_pos,
+                        "location": dest_id,
+                        "fov_radius": 0,
+                        "inventory": [], "equipped": {}, "statuses": [],
+                        "seen_events": [], "private_log": [], "relations": {}, "bonds": {},
+                    }
+                    engine.state.entities[entry_portal["id"]] = entry_portal
+
     # If connecting to an existing map, create a portal on that side too
     if connect_to and connect_to in engine.state.maps and connect_pos:
         # Find the first walkable position in the new map for the reverse portal

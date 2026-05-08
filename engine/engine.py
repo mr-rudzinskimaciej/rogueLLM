@@ -354,6 +354,50 @@ class GameEngine:
                 self.state.turn += 1
             return True
 
+        # `bump` as a top-level primitive (round 7, recognition pass):
+        # Souls traverse portals by bumping them. Not every world ships a
+        # bump rule. Resolve the target (either by id, name, or substring)
+        # and fire door_bump directly so newly-minted maps are reachable
+        # without per-world rule plumbing.
+        if verb == "bump":
+            target_ref = action.get("target") or (action.get("args") or [""])[0]
+            target = None
+            if target_ref and target_ref in self.state.entities:
+                target = self.state.entities[target_ref]
+            elif target_ref:
+                lower = str(target_ref).lower()
+                for _id, ent in self.state.entities.items():
+                    if _id.lower() == lower or ent.get("name", "").lower() == lower:
+                        target = ent
+                        break
+                if target is None:
+                    for _id, ent in self.state.entities.items():
+                        if lower and lower in ent.get("name", "").lower():
+                            target = ent
+                            break
+            # Fall back to adjacent door-tagged entity at the actor's neighbours.
+            if target is None:
+                pos = actor.get("pos", [0, 0])
+                for ent in self.state.entities.values():
+                    if ent.get("location") != actor.get("location"):
+                        continue
+                    if "door" not in ent.get("tags", []) and "portal" not in ent.get("tags", []):
+                        continue
+                    if manhattan(ent.get("pos", [0, 0]), pos) <= 1:
+                        target = ent
+                        break
+            if target is not None:
+                ctx = {"actor": actor, "target": target, "result": {}}
+                try:
+                    self._effect_door_bump({"target": "target"}, ctx, chain_depth)
+                except Exception as exc:
+                    self.state._extra_audit.append(f"bump_failed:{actor['id']}:{type(exc).__name__}:{exc}")
+            else:
+                self.state._extra_audit.append(f"verb_unknown:{actor['id']}:bump:no_target")
+            if increment_turn:
+                self.state.turn += 1
+            return target is not None
+
         rule = self._match_rule(action, context)
         if not rule:
             # Suppress public log of engine-grammar misses (round 5 plumbing).
@@ -1002,7 +1046,7 @@ class GameEngine:
         parts.append("Think: (private reasoning — what you conclude, fear, calculate, or hope; what you're not saying aloud)")
         parts.append("Face: (what your body and expression do — what a careful watcher might see; you cannot fully control it)")
         parts.append("Speak: (what you say aloud, or nothing)")
-        parts.append("Do: [one action from the list above, copied exactly — OR `say \"<your line>\"` when speech IS the whole turn (when you have nothing to do but speak)]")
+        parts.append("Do: [one action from the list above, copied exactly — OR `say \"<your line>\"` when speech IS the whole turn (when you have nothing to do but speak) — OR `bump <portal_or_door_id>` to traverse a passage you stand beside]")
         parts.append("If your feeling toward someone changed: Relation: entity_id=new_stance 'one line why'")
         parts.append("")
         parts.append("Feel and Think are private — be honest there. If you are repeating yourself, something has changed that you haven't named yet. Find it.")
