@@ -570,7 +570,12 @@ One line per action. No commentary."""
                 config=config,
             ) or []
         except Exception as exc:
-            print(f"  [run_round error: {type(exc).__name__}: {exc}]")
+            import traceback
+            tb = traceback.format_exc()
+            print(f"  [run_round error: {type(exc).__name__}: {exc}]", file=sys.stderr)
+            print(tb, file=sys.stderr)
+            # Also stamp the audit so the capture preserves the failure.
+            round_audit = [f"run_round_failed:{type(exc).__name__}:{exc}"] + tb.splitlines()[-5:]
             engine.state.turn += 1  # advance so we don't loop
         turn_calls = CALLS[prior_call_count:]
         prior_call_count = len(CALLS)

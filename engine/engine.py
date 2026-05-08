@@ -364,7 +364,16 @@ class GameEngine:
                 self.state.turn += 1
             return False
         for effect in rule.get("effects", []):
-            self.effect_handlers[effect["effect"]](effect, context, chain_depth)
+            # Per-effect try: a single bad effect (e.g. minted rule referencing
+            # a missing 'target' context) shouldn't kill the actor's whole turn,
+            # let alone the round.
+            eff_name = effect.get("effect", "?")
+            try:
+                self.effect_handlers[eff_name](effect, context, chain_depth)
+            except Exception as exc:
+                self.state._extra_audit.append(
+                    f"effect_failed:{rule.get('id','?')}:{eff_name}:{type(exc).__name__}:{exc}"
+                )
         if increment_turn:
             self.state.turn += 1
         return True

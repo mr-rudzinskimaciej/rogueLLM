@@ -1028,8 +1028,12 @@ def _worldbuilder_llm(config: RuntimeConfig) -> WorldbuilderLLM | None:
 
 def _resolve_entity_id(engine: GameEngine, eid: str) -> str:
     """Resolve GM-supplied entity reference to a real entity ID.
-    GMs sometimes use display names ('Crust') instead of IDs ('baker').
+    GMs sometimes use display names ('Crust') instead of IDs ('baker'),
+    or — when an entity's name contains a quoted gamertag like
+    `Weronika "xXx_slayer420_Xxx"` — they use the gamertag substring alone.
     """
+    if not eid:
+        return eid
     if eid in engine.state.entities:
         return eid
     lower = eid.lower()
@@ -1038,14 +1042,23 @@ def _resolve_entity_id(engine: GameEngine, eid: str) -> str:
     for real_id, ent in engine.state.entities.items():
         if ent.get("name", "").lower() == lower:
             return real_id
+    # Substring match against name (catches gamertag-in-quoted-name).
+    for real_id, ent in engine.state.entities.items():
+        if lower in ent.get("name", "").lower():
+            return real_id
     return eid  # return as-is; will raise KeyError with a clear message
 
 
 def apply_gm_action(engine: GameEngine, action: dict[str, Any], config: RuntimeConfig) -> str:
     verb = action["verb"]
-    # Normalize entity_id: GMs often use display names instead of IDs
+    # Normalize entity_id: GMs often use display names instead of IDs.
+    # If the resolution still produces something the engine doesn't know,
+    # bail with a clear error string instead of crashing apply_gm_action.
     if "entity_id" in action:
-        action = {**action, "entity_id": _resolve_entity_id(engine, action["entity_id"])}
+        resolved = _resolve_entity_id(engine, action["entity_id"])
+        if resolved not in engine.state.entities:
+            return f"{verb}_failed: unknown entity '{action['entity_id']}' (resolved='{resolved}')"
+        action = {**action, "entity_id": resolved}
     if verb == "whisper":
         entity = engine.get_entity(action["entity_id"])
         entity.setdefault("gm_whispers", []).append({"text": action["text"], "turn": engine.state.turn})
@@ -1469,6 +1482,14 @@ def run_round(
     audit: list[str] = []
     failed_actions: list[dict[str, Any]] = []  # collect for GM resolver
 
+    # --- Loud invariants (Repligate steer round 6) -------------------------
+    # The t12-15 collapse in the b5mxxevls smoke happened because actors went
+    # silently unfielded. Make ANY drop-out audible.
+    audit.append(f"actors_alive_mobile:{len(actors)}")
+    if len(actors) == 0 and len([e for e in engine.state.entities.values()
+                                 if "alive" in e.get("tags", []) or "mobile" in e.get("tags", [])]) > 0:
+        audit.append("WARN:actor_list_empty_but_alive_or_mobile_entities_exist")
+
     # --- Async weaver drain (Proposal 3) ----------------------------------
     # If a weaver future from a prior turn has completed, apply its results
     # NOW, before NPCs build their prompts — they should see whatever the
@@ -1491,15 +1512,26 @@ def run_round(
     # Snapshot prompts at start of round for all LLM-driven actors. They
     # all see the same start-of-turn world. Decisions fan out concurrently;
     # resolution stays serial in speed order below.
-    llm_actors = [
-        a for a in actors
-        if a["id"] != player_id
-        and npc_decider
-        and npc_should_use_llm(engine, a, player, config.llm_activation_radius)
-    ]
-    prompts_at_round_start: dict[str, str] = {
-        a["id"]: engine.build_prompt(a["id"]) for a in llm_actors
-    }
+    llm_actors = []
+    for a in actors:
+        if a["id"] == player_id:
+            continue
+        if not npc_decider:
+            audit.append(f"npc_skip:{a['id']}:no_decider")
+            continue
+        if not npc_should_use_llm(engine, a, player, config.llm_activation_radius):
+            audit.append(f"npc_skip:{a['id']}:should_use_llm=False")
+            continue
+        llm_actors.append(a)
+    audit.append(f"llm_actors:{len(llm_actors)}/{len(actors)}")
+
+    prompts_at_round_start: dict[str, str] = {}
+    for a in llm_actors:
+        try:
+            prompts_at_round_start[a["id"]] = engine.build_prompt(a["id"])
+        except Exception as exc:
+            audit.append(f"build_prompt_failed:{a['id']}:{type(exc).__name__}:{exc}")
+            prompts_at_round_start[a["id"]] = ""
     raws_by_id: dict[str, str] = {}
     if llm_actors and npc_decider is not None:
         with ThreadPoolExecutor(max_workers=min(8, len(llm_actors))) as pool:
@@ -1565,8 +1597,13 @@ def run_round(
             audit_item = f"npc_llm:{actor_id}:{action}"
             audit.append(audit_item)
 
-            # Execute — collect failures for GM resolver
-            succeeded = engine.act(actor_id, action, increment_turn=False)
+            # Execute — collect failures for GM resolver. Wrap in try so a
+            # broken rule effect on one actor doesn't drop the whole round.
+            try:
+                succeeded = engine.act(actor_id, action, increment_turn=False)
+            except Exception as exc:
+                audit.append(f"npc_act_failed:{actor_id}:{type(exc).__name__}:{exc}")
+                succeeded = False
             if not succeeded and action.get("verb") != "wait":
                 failed_actions.append({"actor": actor, "action": action})
                 audit.append(f"npc_failed:{actor_id}:{action}")
@@ -1690,7 +1727,10 @@ def run_round(
         if raw_gm:
             gm_actions = parse_gm_actions(raw_gm, max_actions=config.gm_max_actions)
             for gm_action in gm_actions:
-                result = apply_gm_action(engine, gm_action, config)
+                try:
+                    result = apply_gm_action(engine, gm_action, config)
+                except Exception as exc:
+                    result = f"gm_action_failed:{type(exc).__name__}:{exc}"
                 audit_item = f"gm:{result}"
                 audit.append(audit_item)
                 if step_callback:
@@ -1731,7 +1771,10 @@ def run_round(
     if failed_actions and gm_decider and raw_resolve:
         resolve_actions = parse_gm_actions(raw_resolve, max_actions=len(failed_actions) + 2)
         for ra in resolve_actions:
-            result = apply_gm_action(engine, ra, config)
+            try:
+                result = apply_gm_action(engine, ra, config)
+            except Exception as exc:
+                result = f"gm_resolve_failed:{type(exc).__name__}:{exc}"
             audit_item = f"gm_resolve:{result}"
             audit.append(audit_item)
             if step_callback:
@@ -1782,7 +1825,17 @@ def run_round(
     queue = engine.state.flags.get("weaver_queue", [])
     if queue:
         wb_llm = _worldbuilder_llm(config)
-        ready = [it for it in queue if int(it.get("arrive_turn", 999_999)) <= engine.state.turn]
+        # arrive_turn may be missing OR explicitly None (Weaver omitted the
+        # `arrive_turn:N` suffix). Treat None as "ASAP" — arrives this turn.
+        def _arrive_turn(it: dict[str, Any]) -> int:
+            v = it.get("arrive_turn")
+            if v is None:
+                return engine.state.turn
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return engine.state.turn
+        ready = [it for it in queue if _arrive_turn(it) <= engine.state.turn]
         for item in ready:
             queue.remove(item)
             if not wb_llm:
