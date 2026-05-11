@@ -1028,25 +1028,16 @@ def _worldbuilder_llm(config: RuntimeConfig) -> WorldbuilderLLM | None:
 
 def _resolve_entity_id(engine: GameEngine, eid: str) -> str:
     """Resolve GM-supplied entity reference to a real entity ID.
-    GMs sometimes use display names ('Crust') instead of IDs ('baker'),
-    or — when an entity's name contains a quoted gamertag like
-    `Weronika "xXx_slayer420_Xxx"` — they use the gamertag substring alone.
+
+    Thin compatibility wrapper around the shared `engine.resolve_entity()`:
+    returns the resolved id on hit, or the original string on miss (caller —
+    `apply_gm_action` — checks membership in `engine.state.entities` to detect
+    miss and returns an error string instead of crashing). Substring matching
+    handles gamertag-in-quoted-name cases (e.g. `Weronika "xXx_slayer420_Xxx"`).
     """
-    if not eid:
-        return eid
-    if eid in engine.state.entities:
-        return eid
-    lower = eid.lower()
-    if lower in engine.state.entities:
-        return lower
-    for real_id, ent in engine.state.entities.items():
-        if ent.get("name", "").lower() == lower:
-            return real_id
-    # Substring match against name (catches gamertag-in-quoted-name).
-    for real_id, ent in engine.state.entities.items():
-        if lower in ent.get("name", "").lower():
-            return real_id
-    return eid  # return as-is; will raise KeyError with a clear message
+    from .engine import resolve_entity, ResolvedEntity
+    result = resolve_entity(engine.state.entities, eid)
+    return result.id if isinstance(result, ResolvedEntity) else eid
 
 
 def apply_gm_action(engine: GameEngine, action: dict[str, Any], config: RuntimeConfig) -> str:

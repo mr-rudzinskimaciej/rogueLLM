@@ -29,6 +29,50 @@ def manhattan(a: list[int], b: list[int]) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
+@dataclass
+class ResolvedEntity:
+    """An entity successfully looked up from an LLM-supplied reference string."""
+    id: str
+    entity: dict[str, Any]
+
+
+@dataclass
+class UnresolvedRef:
+    """An entity reference the engine could not resolve to any known entity.
+    Audit-only; effect handlers and apply_gm_action turn this into a clean
+    skip/error rather than crashing on get_entity()."""
+    attempted: str
+    reason: str  # "empty" | "no_match"
+
+
+def resolve_entity(entities: dict[str, dict[str, Any]], ref: str) -> "ResolvedEntity | UnresolvedRef":
+    """Single trust-boundary resolver: LLM-supplied string → entity handle.
+
+    Tries (in order): exact id, lowercase id, exact name (case-insensitive),
+    substring match against names (catches gamertag-in-quoted-name).
+
+    All callers — apply_gm_action's entity_id field, rule effect handlers'
+    _entity_ref, the bump primitive's adjacent-portal lookup — route through
+    here so the matching rules live in one place and unresolvable references
+    surface as a typed result, not a crash or a "return bad string and pray."
+    """
+    if ref is None or ref == "":
+        return UnresolvedRef(attempted=ref or "", reason="empty")
+    ref_s = str(ref)
+    if ref_s in entities:
+        return ResolvedEntity(id=ref_s, entity=entities[ref_s])
+    lower = ref_s.lower()
+    if lower in entities:
+        return ResolvedEntity(id=lower, entity=entities[lower])
+    for eid, ent in entities.items():
+        if ent.get("name", "").lower() == lower:
+            return ResolvedEntity(id=eid, entity=ent)
+    for eid, ent in entities.items():
+        if lower in ent.get("name", "").lower():
+            return ResolvedEntity(id=eid, entity=ent)
+    return UnresolvedRef(attempted=ref_s, reason="no_match")
+
+
 class EvalDict(dict):
     def __getattr__(self, key: str) -> Any:
         if key in self:
@@ -164,10 +208,22 @@ class GameEngine:
         return INTERPOLATION_RE.sub(repl, text)
 
     def _entity_ref(self, ref: str, context: dict[str, Any], default_ref: str) -> dict[str, Any]:
+        """Resolve a rule-effect's entity reference.
+
+        Two-phase resolution: first look the ref up as a CONTEXT KEY
+        (effects often say "target"/"actor"/"item" expecting the context
+        dict to hold the already-resolved entity at that key); if no
+        context match, fall through to the shared `resolve_entity()`
+        which handles id/name/substring matching. Unresolvable refs raise
+        KeyError — caller (engine.act's per-effect try) audits and skips.
+        """
         key = ref or default_ref
         if key in context and isinstance(context[key], dict):
             return context[key]
-        return self.get_entity(key)
+        result = resolve_entity(self.state.entities, key)
+        if isinstance(result, ResolvedEntity):
+            return result.entity
+        raise KeyError(result.attempted)
 
     def _tags_match(self, owned: set[str], required: list[str]) -> bool:
         for raw in required:
@@ -362,19 +418,10 @@ class GameEngine:
         if verb == "bump":
             target_ref = action.get("target") or (action.get("args") or [""])[0]
             target = None
-            if target_ref and target_ref in self.state.entities:
-                target = self.state.entities[target_ref]
-            elif target_ref:
-                lower = str(target_ref).lower()
-                for _id, ent in self.state.entities.items():
-                    if _id.lower() == lower or ent.get("name", "").lower() == lower:
-                        target = ent
-                        break
-                if target is None:
-                    for _id, ent in self.state.entities.items():
-                        if lower and lower in ent.get("name", "").lower():
-                            target = ent
-                            break
+            if target_ref:
+                result = resolve_entity(self.state.entities, target_ref)
+                if isinstance(result, ResolvedEntity):
+                    target = result.entity
             # Fall back to adjacent door-tagged entity at the actor's neighbours.
             if target is None:
                 pos = actor.get("pos", [0, 0])
@@ -426,8 +473,113 @@ class GameEngine:
         target = self._entity_ref(effect.get("target", "target"), context, "target")
         amount = max(0, int(round(float(self._resolve(effect.get("formula", effect.get("value", 0)), context)))))
         stats = target.setdefault("stats", {})
-        stats["hp"] = max(0, int(stats.get("hp", 0)) - amount)
+        prior_hp = int(stats.get("hp", 0))
+        stats["hp"] = max(0, prior_hp - amount)
         context["result"]["damage"] = amount
+        # Death hook — fires once when a being crosses to hp=0. Drops inventory +
+        # a named-body item in place, archives a memorial record, and logs the
+        # turn for `aspect_recent_death_pulse`. The soul's own private_log dies
+        # with them (no ghost entries); logs ABOUT them stay in others.
+        if stats["hp"] == 0 and prior_hp > 0 and "alive" in target.get("tags", []):
+            self._handle_death(target)
+
+    def _handle_death(self, target: dict[str, Any]) -> None:
+        """Run the death pipeline for a soul that just hit hp=0.
+
+        - Strip `alive` and `mobile` tags so they drop out of the actor list.
+        - Drop their inventory as standalone item entities at their tile.
+        - Mint a named-body item at the same tile (the corpse).
+        - Append a memorial record into state.flags['memorial'].
+        - Stamp state.flags['recent_deaths'] for `aspect_recent_death_pulse`.
+
+        The soul's `private_log` is left intact (it is dead text now). No new
+        entries land — no ghosting. References to them in OTHER souls'
+        seen_events and private_log are preserved by not pruning anything.
+        """
+        eid = target.get("id", "?")
+        ename = target.get("name", eid)
+        loc = target.get("location", self.state.current_map_id)
+        pos = list(target.get("pos", [0, 0]))
+
+        tags = target.setdefault("tags", [])
+        if "alive" in tags:
+            tags.remove("alive")
+        if "mobile" in tags:
+            tags.remove("mobile")
+        if "dead" not in tags:
+            tags.append("dead")
+
+        # Spill inventory items into the world as standalone entities, side-by-side.
+        spill_x = pos[0]
+        spill_y = pos[1]
+        for idx, item_id in enumerate(list(target.get("inventory", []))):
+            spawn_id = f"{item_id}_dropped_{self.state.turn}_{idx}"
+            self.state.entities[spawn_id] = {
+                "id": spawn_id,
+                "template": item_id,
+                "name": item_id,
+                "glyph": "?",
+                "tags": ["item", "dropped"],
+                "location": loc,
+                "pos": [spill_x, spill_y],
+                "stats": {}, "inventory": [], "equipped": {}, "statuses": [],
+                "seen_events": [], "private_log": [], "relations": {}, "bonds": {},
+                "fov_radius": 0,
+            }
+        target["inventory"] = []
+        target["equipped"] = {}
+
+        # Mint the named-body item entity at their tile.
+        body_id = f"body_of_{eid}_{self.state.turn}"
+        body_name = f"the body of {ename}"
+        self.state.entities[body_id] = {
+            "id": body_id,
+            "name": body_name,
+            "glyph": "%",
+            "tags": ["item", "body", "corpse", "inventory_source"],
+            "location": loc,
+            "pos": pos,
+            "stats": {"was_id": eid, "died_turn": self.state.turn},
+            "inventory": [], "equipped": {}, "statuses": [],
+            "seen_events": [], "private_log": [], "relations": {}, "bonds": {},
+            "fov_radius": 0,
+        }
+
+        # Memorial archive — survives this game; can be re-summoned in others.
+        memorial = self.state.flags.setdefault("memorial", [])
+        personality = target.get("personality") or {}
+        gm_notes = self.state.flags.get("gm_notes") or {}
+        lore_id = gm_notes.get("world_name") if isinstance(gm_notes, dict) else None
+        memorial.append({
+            "id": eid,
+            "name": ename,
+            "died_turn": self.state.turn,
+            "died_location": loc,
+            "lore_id": lore_id,
+            "identity_anchor": personality.get("identity_anchor"),
+            "body": personality.get("body"),
+            "wound": personality.get("wound"),
+            "inner_voice": personality.get("inner_voice"),
+            "speech": personality.get("speech"),
+            "traits": list(personality.get("traits", [])),
+            "drives": personality.get("drives"),
+            "private_log_tail": [
+                {"type": e.get("type"), "text": e.get("text", "")[:240]}
+                for e in target.get("private_log", [])[-5:]
+            ],
+            "bonds": dict(target.get("bonds", {})),
+        })
+
+        # Stamp for `aspect_recent_death_pulse` — Breath reads this next turn.
+        deaths = self.state.flags.setdefault("recent_deaths", [])
+        deaths.append({"turn": self.state.turn, "id": eid, "name": ename, "location": loc})
+
+        # Public event the room registers.
+        self.log_event(
+            f"{ename} dies. Their body settles at {pos}; what they carried spills.",
+            pos, loc, source="world",
+        )
+        self.state._extra_audit.append(f"death:{eid}@{loc}")
 
     def _effect_heal(self, effect: dict[str, Any], context: dict[str, Any], _: int) -> None:
         target = self._entity_ref(effect.get("target", "actor"), context, "actor")

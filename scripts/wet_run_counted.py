@@ -392,16 +392,76 @@ One line per action. No commentary."""
         resp = adapter.llm_chat_completion(system, prompt, model=args.model, temperature=args.temp)
         return resp.strip() if resp.strip() else "Do: [wait]"
 
+    # --- State→prompt framework: dynamic appendix to Settling's system prompt ---
+    # First reference instance of the pattern: an observer in
+    # `engine.state_aspects` returns a label; here we append a directive paragraph
+    # that overrides Settling's static guidance for THIS turn. Future observers
+    # follow this same shape (append directive) or the prefix-inject shape used
+    # by Breath below. The pattern is: read state → label → swap a paragraph.
+    SETTLING_SATURATED_DIRECTIVE = (
+        "\n\n[STATE: room saturated] The current map's population_target has been "
+        "reached. `create_character` is OFF this turn. Names whose souls have "
+        "been silent for many turns can fade; presences without recent action "
+        "can quietly exit. Prefer FAREWELL to arrival. The existing souls have "
+        "to do the work. Whisper, inject, narrate."
+    )
+
+    def _settling_system_for_turn(eng) -> str:
+        """Build the Settling system prompt with state-aware appendix."""
+        from engine.state_aspects import aspect_entity_count_pressure
+        pressure = aspect_entity_count_pressure(eng.state)
+        if pressure == "saturated":
+            return SETTLING_SYSTEM + SETTLING_SATURATED_DIRECTIVE
+        return SETTLING_SYSTEM
+
     def settling_decider(prompt: str) -> str:
         CURRENT_ROLE[0] = "gm_settling"
         if args.delay > 0:
             time.sleep(args.delay)
-        return adapter.llm_chat_completion(SETTLING_SYSTEM, prompt, model=gm_model, temperature=args.temp_gm)
+        sys_prompt = _settling_system_for_turn(engine)
+        return adapter.llm_chat_completion(sys_prompt, prompt, model=gm_model, temperature=args.temp_gm)
 
     def _strip_section(prompt: str, header: str) -> str:
         """Remove a labelled line like 'INTERVENTION_POLICY: ...' from the prompt."""
         lines = prompt.splitlines()
         return "\n".join(l for l in lines if not l.startswith(header))
+
+    def _breath_state_prefix(engine) -> str:
+        """State→prompt: prefix-inject for Breath.
+
+        Two observers, two one-liners. The room knows when someone has just
+        died and when bodies are sharpening — Breath should be reading that
+        weather before it writes its grace-note. This is the SECOND reference
+        instance of the state→prompt pattern: observer returns a label/dict,
+        we inject a short atmospheric line (vs. Settling's paragraph-append).
+        """
+        from engine.state_aspects import aspect_recent_death_pulse, aspect_body_needs_climate
+        lines: list[str] = []
+        death = aspect_recent_death_pulse(engine.state)
+        if death.get("active"):
+            names = ", ".join(death["names"])
+            ago = death.get("turns_ago", 0)
+            lines.append(
+                f"[STATE: recent death] {names} died {ago} turn(s) ago. "
+                f"The room knows. Air carries it before words do — a hush, "
+                f"a temperature change, the texture of an absence in the breath."
+            )
+        body = aspect_body_needs_climate(engine.state)
+        if body.get("label") != "calm":
+            label = body["label"]
+            h = body["hunger_mean"]
+            t = body["thirst_mean"]
+            hot = ", ".join(body["hot_names"]) if body["hot_names"] else ""
+            line = (
+                f"[STATE: bodies {label}] mean hunger={h}, thirst={t}. "
+                f"Ground your grace-note in body weather — dry mouths, hollow "
+                f"stomachs, the way light reads different when the blood is "
+                f"low on salt."
+            )
+            if hot:
+                line += f" Specifically sharpening: {hot}."
+            lines.append(line)
+        return "\n".join(lines) + "\n" if lines else ""
 
     def run_breath(engine) -> int:
         """Invoke the Breath organ BEFORE beings act. Returns # actions applied."""
@@ -414,6 +474,7 @@ One line per action. No commentary."""
             f"SCENE PHASE: {phase}\n"
             f"{_breath_policy_line()}"
             f"{_breath_register_line()}\n"
+            f"{_breath_state_prefix(engine)}"
             f"{base_prompt}\n\n"
             f"You are BREATH. Emit one sensory line via `narrate \"...\"`, or pass. "
             f"If SCENE PHASE is 'opening' you must establish (do not pass)."

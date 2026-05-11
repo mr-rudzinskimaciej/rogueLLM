@@ -817,12 +817,22 @@ THIS map and points back to the connecting map. Match the portal's
 `name` and `open_message` to the shared vocabulary of both sides.
 The reverse portal on the other map is handled by the engine.
 
+=== POPULATION TARGET ===
+
+How many alive+mobile beings can this room HOLD before it feels
+crowded — before another arrival would have to push someone out?
+A pocket holds 2-3, a chamber 4-6, a hall 7-10. Crowded rooms
+tighten the substrate's create_character license; sparse rooms
+loosen it. Pick the smallest number that feels honest for the
+shape you laid down.
+
 === OUTPUT SHAPE ===
 
 {
   "id": "snake_case",
   "name": "Display Name",
   "desc": "1-2 sentences. Concrete. Contracted with the grid.",
+  "population_target": <int — see above>,
   "grid": ["row_string", ...],
   "legend": {
     "#": {"name": "<setting wall>",   "tags": ["solid", "opaque"]},
@@ -906,6 +916,10 @@ def create_map(
             "#": {"tags": ["solid", "opaque"]},
             ".": {"tags": ["walkable"]},
         }),
+        # Read by `engine.state_aspects.aspect_entity_count_pressure`. Optional
+        # at create-time; the aspect falls back to sqrt(walkable_tile_count)
+        # when unset.
+        "population_target": data.get("population_target"),
     }
 
     # Insert portal entities
