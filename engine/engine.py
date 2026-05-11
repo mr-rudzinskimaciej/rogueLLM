@@ -476,6 +476,31 @@ class GameEngine:
         prior_hp = int(stats.get("hp", 0))
         stats["hp"] = max(0, prior_hp - amount)
         context["result"]["damage"] = amount
+
+        # Damage-as-persona-description: when a being takes meaningful damage,
+        # log a `wound`-typed entry into their private memory. The compaction
+        # path already lists `wound` in ALLOWED_PERSONALITY, so on next overflow
+        # it folds these traces into the being's `personality.wound` paragraph
+        # as living description. Souls also read recent private_log entries in
+        # their per-turn prompt, so the wound is felt immediately.
+        if amount > 0 and "alive" in target.get("tags", []):
+            max_hp = max(1, int(stats.get("max_hp", amount)))
+            pct = (amount / max_hp) * 100
+            if pct >= 10:
+                if pct >= 50:
+                    severity = "savagely"
+                elif pct >= 30:
+                    severity = "deeply"
+                elif pct >= 18:
+                    severity = "noticeably"
+                else:
+                    severity = "lightly"
+                self.log_private(
+                    target["id"],
+                    f"hurt {severity}: took {amount} damage ({int(pct)}% of max). The body remembers — a new ache joins the old ones.",
+                    "wound",
+                )
+
         # Death hook — fires once when a being crosses to hp=0. Drops inventory +
         # a named-body item in place, archives a memorial record, and logs the
         # turn for `aspect_recent_death_pulse`. The soul's own private_log dies
