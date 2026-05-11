@@ -434,23 +434,50 @@ def derive_atlas_code(name: str, existing: set[str]) -> str:
     yields the same code given the same `existing` set.
 
     Algorithm:
-      1. base = first two consonants of `name`, lowercased.
-         Fallback to the first two alpha characters if `name` has <2
-         consonants (Greek/Cyrillic-heavy worlds, vowel-loud names).
-      2. Collision resolution, bio-Maciej's rule (letter-size before digits):
+      1. Multi-word names: base = first leading-consonant of word 1 +
+         first leading-consonant of word 2, lowercased. ("mine shaft" → ms.)
+         When a word starts with a vowel, fall through to its first alpha
+         character (so "mine open-pit" still yields "mo").
+      2. Single-word names: base = first two consonants, lowercased.
+         Fallback to the first two alpha characters when the word has <2
+         consonants (vowel-loud names, Greek/Cyrillic-heavy worlds).
+      3. Collision resolution, bio-Maciej's rule (letter-size before digits):
          `ms` taken → try `Ms`. `ms` and `Ms` taken → `ms2`, `Ms2`, `ms3`, …
          Short codes stay short; digits are last resort.
     """
-    alpha = [c for c in (name or "") if c.isalpha()]
-    consonants = [c for c in alpha if c.lower() not in "aeiouy"]
-    if len(consonants) >= 2:
-        base = (consonants[0] + consonants[1]).lower()
-    elif len(alpha) >= 2:
-        base = (alpha[0] + alpha[1]).lower()
-    elif alpha:
-        base = (alpha[0] + alpha[0]).lower()
-    else:
-        base = "xx"
+    raw = name or ""
+    # Split on whitespace and hyphens so "mine shaft" and "mine-shaft" both
+    # decompose into ["mine", "shaft"]. Empty parts (double spaces) filtered.
+    words = [w for w in re.split(r"[\s\-_]+", raw) if w]
+
+    def _first_consonant_or_alpha(word: str) -> str | None:
+        for ch in word:
+            if ch.isalpha() and ch.lower() not in "aeiouy":
+                return ch.lower()
+        for ch in word:
+            if ch.isalpha():
+                return ch.lower()
+        return None
+
+    base: str | None = None
+    if len(words) >= 2:
+        c0 = _first_consonant_or_alpha(words[0])
+        c1 = _first_consonant_or_alpha(words[1])
+        if c0 and c1:
+            base = c0 + c1
+
+    if base is None:
+        # Single-word path (or two-word path where one word was non-alpha).
+        alpha = [c for c in raw if c.isalpha()]
+        consonants = [c for c in alpha if c.lower() not in "aeiouy"]
+        if len(consonants) >= 2:
+            base = (consonants[0] + consonants[1]).lower()
+        elif len(alpha) >= 2:
+            base = (alpha[0] + alpha[1]).lower()
+        elif alpha:
+            base = (alpha[0] + alpha[0]).lower()
+        else:
+            base = "xx"
     if base not in existing:
         return base
     cap = base.capitalize()  # e.g. "ms" → "Ms"

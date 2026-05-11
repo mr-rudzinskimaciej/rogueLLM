@@ -96,8 +96,11 @@ def aspect_body_needs_climate(state: Any) -> dict[str, Any]:
     }
 
     Computed over `alive` entities only (dead souls have no body). Labels are
-    chosen by the WORST channel — if mean thirst is 70 and mean hunger is 20,
-    label is "sharp" because thirst is doing the work.
+    chosen by the WORST of (mean of each channel) AND (max-individual on each
+    channel) — so a single soul dying of thirst escalates the climate to
+    "critical" even when the population mean is calm. A pool of mildly
+    parched souls escalates the same way once the mean drifts up. Either
+    pressure shape (broad warmth or a single hot spike) reaches the substrate.
 
     Read by Breath (atmospheric prefix when label != "calm") and by Settling
     (which may nudge a fountain whisper if "sharp" persists). The substrate
@@ -110,7 +113,9 @@ def aspect_body_needs_climate(state: Any) -> dict[str, Any]:
     thirsts = [int(e.get("stats", {}).get("thirst", 0)) for e in alive]
     h_mean = sum(hungers) // len(hungers)
     t_mean = sum(thirsts) // len(thirsts)
-    worst = max(h_mean, t_mean)
+    # Worst pressure across both shape and spike: a single soul critically
+    # hungry must be visible to the climate, not averaged into invisibility.
+    worst = max(h_mean, t_mean, max(hungers), max(thirsts))
     if worst >= 85:
         label = "critical"
     elif worst >= 65:
