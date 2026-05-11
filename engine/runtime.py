@@ -1357,6 +1357,11 @@ def compact_memory(
         "identity_anchor", "body", "wound", "contradictions", "drives",
         "bonds", "knowledge", "plan", "fears", "notices_first", "inner_voice",
         "comfort", "speech", "traits", "goals", "memory",
+        # round-10 map design: per-NPC subjective gloss over the global atlas.
+        # See `state.flags["atlas"]` for the canonical structural truth; this
+        # field carries the soul's private meaning of each atlas-node and is
+        # preserved across compaction so place-memory survives identity update.
+        "map_gloss",
     }
     FORBIDDEN = {"id", "name", "glyph", "tags", "stats", "inventory",
                  "equipped", "pos", "location", "fov_radius"}

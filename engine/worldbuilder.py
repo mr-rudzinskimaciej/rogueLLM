@@ -425,6 +425,46 @@ def _extract_json(raw: str) -> dict[str, Any] | None:
     return None
 
 
+def derive_atlas_code(name: str, existing: set[str]) -> str:
+    """Mint a short, stable atlas-code from a map's display name.
+
+    Round-10 map design: every atlas node carries a 2-char code that is
+    invariant across the placeholder → rendered lifecycle. The code is
+    derived deterministically from the name so the same sketch always
+    yields the same code given the same `existing` set.
+
+    Algorithm:
+      1. base = first two consonants of `name`, lowercased.
+         Fallback to the first two alpha characters if `name` has <2
+         consonants (Greek/Cyrillic-heavy worlds, vowel-loud names).
+      2. Collision resolution, bio-Maciej's rule (letter-size before digits):
+         `ms` taken → try `Ms`. `ms` and `Ms` taken → `ms2`, `Ms2`, `ms3`, …
+         Short codes stay short; digits are last resort.
+    """
+    alpha = [c for c in (name or "") if c.isalpha()]
+    consonants = [c for c in alpha if c.lower() not in "aeiouy"]
+    if len(consonants) >= 2:
+        base = (consonants[0] + consonants[1]).lower()
+    elif len(alpha) >= 2:
+        base = (alpha[0] + alpha[1]).lower()
+    elif alpha:
+        base = (alpha[0] + alpha[0]).lower()
+    else:
+        base = "xx"
+    if base not in existing:
+        return base
+    cap = base.capitalize()  # e.g. "ms" → "Ms"
+    if cap != base and cap not in existing:
+        return cap
+    suffix = 2
+    while True:
+        for stem in (base, cap):
+            candidate = f"{stem}{suffix}"
+            if candidate not in existing:
+                return candidate
+        suffix += 1
+
+
 # Required fields for a valid character entity
 _REQUIRED_FIELDS = {"id", "name", "glyph", "tags", "stats"}
 _REQUIRED_PERSONALITY = {"identity_anchor", "body", "wound", "drives", "speech"}

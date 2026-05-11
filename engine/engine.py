@@ -159,7 +159,19 @@ class GameEngine:
             item_templates=entities_data["templates"],
             rules=sorted(rules_data, key=lambda r: r.get("priority", 0), reverse=True),
             statuses=statuses_data,
-            flags={"location": current_map_id, "gm_notes": world.get("gm_notes", "")},
+            flags={
+                "location": current_map_id,
+                "gm_notes": world.get("gm_notes", ""),
+                # Round-10 map design: the global structural truth — node-codes
+                # to {name, map_id, world_desc, tags, seed_turn} plus an edge
+                # list. NPCs see filtered slices via `personality.map_gloss`;
+                # the Weaver sees the whole thing. A `_synthesize_atlas` loader
+                # that reads `world.get("atlas")` (with backward-compat
+                # synthesis from `maps_data`) is on the roadmap; today we
+                # initialize empty so every consumer can rely on the key
+                # existing. See `debug/runs/round11_implementation_roadmap.md`.
+                "atlas": world.get("atlas") or {"nodes": {}, "edges": []},
+            },
         )
         return cls(state=state, rng_seed=int(world.get("rng_seed", 7)))
 
